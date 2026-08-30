@@ -41,7 +41,7 @@ WHERE request_id IS NULL;
 
 ALTER TABLE deals
   ALTER COLUMN request_id SET DEFAULT
-    ('DRMS-' || UPPER(SUBSTRING(REPLACE(uuid_generate_v4()::text, '-', '') FROM 1 FOR 10))),
+    ('DRMS-' || UPPER(SUBSTRING(REPLACE(gen_random_uuid()::text, '-', '') FROM 1 FOR 10))),
   ALTER COLUMN request_id SET NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_deals_account_request_id
@@ -79,15 +79,15 @@ SET name = 'Disaster Response Coordination'
 WHERE name = 'Sales Pipeline';
 
 UPDATE pipeline_stages ps
-SET name = CASE name
+SET name = CASE ps.name
       WHEN 'New Lead' THEN 'RECEIVED'
       WHEN 'Qualified' THEN 'VERIFIED'
       WHEN 'Proposal Sent' THEN 'ASSIGNED'
       WHEN 'Negotiation' THEN 'DISPATCHED'
       WHEN 'Won' THEN 'RESOLVED'
-      ELSE name
+      ELSE ps.name
     END,
-    incident_status = CASE name
+    incident_status = CASE ps.name
       WHEN 'New Lead' THEN 'received'::incident_status_enum
       WHEN 'Qualified' THEN 'verified'::incident_status_enum
       WHEN 'Proposal Sent' THEN 'assigned'::incident_status_enum
@@ -100,7 +100,7 @@ FROM pipelines p
 WHERE ps.pipeline_id = p.id AND p.name = 'Disaster Response Coordination';
 
 UPDATE pipeline_stages ps
-SET position = position + 1
+SET position = ps.position + 1
 FROM pipelines p
 WHERE ps.pipeline_id = p.id AND p.name = 'Disaster Response Coordination'
   AND ps.name = 'RESOLVED'
