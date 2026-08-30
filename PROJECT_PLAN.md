@@ -128,3 +128,11 @@ If the intended work is instead a migration to a different stack, database, host
 - Use signed, idempotent `message.received` webhooks at `/api/whatsapp/openwa/webhook`; process plain text only and never invoke the optional AI reply system for OpenWA inbound traffic.
 - Keep OpenWA API credentials and webhook HMAC secret in server-side deployment configuration. Store only the non-secret gateway session id in the existing `whatsapp_config` row.
 - Run OpenWA separately from Vercel on a persistent host. Its session state is transport infrastructure; Supabase remains the single source of operational truth.
+
+### Phase 4B — Vercel scheduling
+
+**Status:** Implemented; requires a `CRON_SECRET` in Vercel production settings.
+
+- Register the existing automation-wait and flow-timeout sweep routes as Vercel Cron jobs.
+- Accept Vercel's `Authorization: Bearer $CRON_SECRET` while preserving the existing external scheduler header for Docker deployments.
+- Use daily schedules compatible with Vercel Hobby; change the committed schedule to every five minutes after upgrading to Pro if short Wait-step precision is required.
