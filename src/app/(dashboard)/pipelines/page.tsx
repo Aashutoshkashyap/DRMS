@@ -30,6 +30,8 @@ import { useCan } from "@/hooks/use-can";
 import { useAuth } from "@/hooks/use-auth";
 import { GatedButton } from "@/components/ui/gated-button";
 import { useTranslations } from "next-intl";
+import { DISASTER_PIPELINE_STAGES, ensureDisasterPipeline } from "@/lib/incidents/pipeline-service";
+import { requestIncidentStatusNotification } from "@/lib/incidents/request-notification-client";
 
 // Pipeline creation is admin-class (settings-tier write under
 // the new RLS); deal creation is operational and only requires
@@ -37,14 +39,6 @@ import { useTranslations } from "next-intl";
 // not on different copy.
 
 // Spec-defined seed — name and color per the product spec.
-const SPEC_DEFAULT_STAGES = [
-  { name: "New Lead", color: "#3b82f6", position: 0 }, // blue
-  { name: "Qualified", color: "#eab308", position: 1 }, // yellow
-  { name: "Proposal Sent", color: "#f97316", position: 2 }, // orange
-  { name: "Negotiation", color: "#8b5cf6", position: 3 }, // purple
-  { name: "Won", color: "#22c55e", position: 4 }, // green
-];
-
 export default function PipelinesPage() {
   const t = useTranslations("Pipelines.page");
   const supabase = createClient();
@@ -69,6 +63,9 @@ export default function PipelinesPage() {
   const [dealFormOpen, setDealFormOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [defaultStageId, setDefaultStageId] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
 
   // Guard against double-seeding (React StrictMode double-effect in dev).
   const seedAttempted = useRef(false);
@@ -118,26 +115,14 @@ export default function PipelinesPage() {
     // pipelines.account_id is NOT NULL post-017 with no DB default.
     if (!accountId) return null;
 
-    const { data: pipeline, error } = await supabase
-      .from("pipelines")
-      .insert({ user_id: user.id, account_id: accountId, name: "Sales Pipeline" })
-      .select()
-      .single();
-
-    if (error || !pipeline) {
-      console.error("Failed to seed pipeline:", error?.message);
+    try {
+      const result = await ensureDisasterPipeline(supabase, accountId, user.id);
+      const { data: pipeline } = await supabase.from("pipelines").select("*").eq("id", result.pipelineId).single();
+      return (pipeline as Pipeline | null) ?? null;
+    } catch (error) {
+      console.error("Failed to seed pipeline:", error);
       return null;
     }
-
-    const stagesPayload = SPEC_DEFAULT_STAGES.map((s) => ({
-      pipeline_id: pipeline.id,
-      name: s.name,
-      color: s.color,
-      position: s.position,
-    }));
-    await supabase.from("pipeline_stages").insert(stagesPayload);
-
-    return pipeline as Pipeline;
   }, [supabase, accountId]);
 
   // Initial load + seed-if-empty
@@ -175,9 +160,9 @@ export default function PipelinesPage() {
   // callbacks (not synchronous in the effect body).
   useEffect(() => {
     if (!selectedPipelineId) {
+      // Clearing the selected pipeline synchronizes the board with its absence.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setStages([]);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDeals([]);
       return;
     }
@@ -227,6 +212,8 @@ export default function PipelinesPage() {
       if (error) {
         toast.error(t("toastFailedMoveDeal"));
         refreshDeals();
+      } else if (!(await requestIncidentStatusNotification(dealId))) {
+        toast.error("Status changed, but the WhatsApp update could not be delivered. The failure was recorded for coordinator retry.");
       }
     },
     [supabase, refreshDeals, t],
@@ -279,11 +266,12 @@ export default function PipelinesPage() {
       return;
     }
 
-    const stagesPayload = SPEC_DEFAULT_STAGES.map((s) => ({
+    const stagesPayload = DISASTER_PIPELINE_STAGES.map((s) => ({
       pipeline_id: pipeline.id,
       name: s.name,
       color: s.color,
       position: s.position,
+      incident_status: s.incident_status,
     }));
     await supabase.from("pipeline_stages").insert(stagesPayload);
 
@@ -296,6 +284,11 @@ export default function PipelinesPage() {
   }
 
   const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId);
+  const filteredDeals = deals.filter((request) =>
+    (statusFilter === "all" || request.incident_status === statusFilter) &&
+    (categoryFilter === "all" || request.category === categoryFilter) &&
+    (priorityFilter === "all" || request.priority === priorityFilter),
+  );
 
   if (loading) {
     return (
@@ -315,6 +308,10 @@ export default function PipelinesPage() {
 
   return (
     <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold text-foreground">Disaster coordination</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Track citizen requests through human verification, assignment, dispatch, and resolution.</p>
+      </div>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -412,10 +409,15 @@ export default function PipelinesPage() {
         </div>
       ) : (
         <>
-          <PipelineAnalytics stages={stages} deals={deals} />
+          <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card/60 p-3">
+            <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="all">All statuses</option><option value="received">Received</option><option value="verified">Verified</option><option value="assigned">Assigned</option><option value="dispatched">Dispatched</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select>
+            <select aria-label="Filter by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="all">All categories</option><option value="rescue">Rescue</option><option value="food_water">Food / Water</option><option value="medicine">Medicine</option><option value="shelter">Shelter</option><option value="missing_person">Missing person</option><option value="information">Information</option></select>
+            <select aria-label="Filter by priority" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+          </div>
+          <PipelineAnalytics stages={stages} deals={filteredDeals} />
           <PipelineBoard
             stages={stages}
-            deals={deals}
+            deals={filteredDeals}
             onDealMoved={handleDealMoved}
             onAddDeal={handleAddDeal}
             onEditDeal={handleEditDeal}

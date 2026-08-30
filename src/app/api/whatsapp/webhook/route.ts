@@ -11,6 +11,7 @@ import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiReply } from '@/lib/ai/auto-reply'
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver'
+import { handleWhatsAppEmergencyInbound } from '@/lib/whatsapp/emergency-interface'
 import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
@@ -764,6 +765,31 @@ async function processMessage(
   // SQL — see the helper for why that matters.
   await reopenClosedConversation(supabaseAdmin(), conversation)
 
+  // The emergency adapter runs after the shared contact/conversation/message
+  // persistence boundary. It owns only explicit START/menu interactions and
+  // an active deterministic intake; ordinary WhatsApp conversations keep the
+  // existing Flow, automation, and optional AI paths below.
+  let emergencyConsumed = false
+  try {
+    emergencyConsumed = (await handleWhatsAppEmergencyInbound({
+      db: supabaseAdmin(),
+      accountId,
+      userId: configOwnerUserId,
+      contactId: contactRecord.id,
+      conversationId: conversation.id,
+      inboundMessageId: message.id,
+      input: {
+        text: contentText ?? message.text?.body ?? null,
+        interactionId: interactiveReplyId,
+        location: message.location ?? null,
+      },
+    })).consumed
+  } catch (error) {
+    // The inbound message is already durable. Do not fail the webhook or
+    // duplicate it because an optional outgoing prompt could not be sent.
+    console.error('[emergency-interface] inbound handling failed:', error)
+  }
+
   // If this contact was a recent broadcast recipient, flag the reply
   // so the broadcast's `replied_count` advances (via the aggregate
   // trigger installed in migration 003).
@@ -788,26 +814,28 @@ async function processMessage(
   // no active flows take the runner's early-exit "no_match" path
   // basically for free (one indexed SELECT for the active run).
   // ============================================================
-  const flowResult = await dispatchInboundToFlows({
-    accountId,
-    userId: configOwnerUserId,
-    contactId: contactRecord.id,
-    conversationId: conversation.id,
-    message:
-      interactiveReplyId
-        ? {
-            kind: 'interactive_reply',
-            reply_id: interactiveReplyId,
-            reply_title: contentText ?? '',
-            meta_message_id: message.id,
-          }
-        : {
-            kind: 'text',
-            text: contentText ?? message.text?.body ?? '',
-            meta_message_id: message.id,
-          },
-    isFirstInboundMessage,
-  })
+  const flowResult = emergencyConsumed
+    ? { consumed: true }
+    : await dispatchInboundToFlows({
+      accountId,
+      userId: configOwnerUserId,
+      contactId: contactRecord.id,
+      conversationId: conversation.id,
+      message:
+        interactiveReplyId
+          ? {
+              kind: 'interactive_reply',
+              reply_id: interactiveReplyId,
+              reply_title: contentText ?? '',
+              meta_message_id: message.id,
+            }
+          : {
+              kind: 'text',
+              text: contentText ?? message.text?.body ?? '',
+              meta_message_id: message.id,
+            },
+      isFirstInboundMessage,
+    })
   const flowConsumed = flowResult.consumed
 
   // Fire any automations that react to this webhook event. All dispatches

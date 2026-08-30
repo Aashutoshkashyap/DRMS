@@ -23,6 +23,7 @@ import {
   Users,
   UsersRound,
   Workflow,
+  MapPinned,
   X,
   Zap,
 } from "lucide-react";
@@ -95,6 +96,7 @@ const navItems: NavItem[] = [
   { href: "/notifications", labelKey: "notifications", icon: Bell },
   { href: "/contacts", labelKey: "contacts", icon: Users },
   { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
+  { href: "/resources", labelKey: "resources", icon: MapPinned },
   { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },

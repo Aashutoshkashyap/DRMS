@@ -362,9 +362,27 @@ export interface PipelineStage {
   position: number;
   color: string;
   created_at: string;
+  /** Optional stage-to-incident mapping for the disaster workflow. */
+  incident_status?: IncidentStatus | null;
 }
 
 export type DealStatus = 'open' | 'won' | 'lost';
+
+export type IncidentCategory =
+  | 'rescue'
+  | 'food_water'
+  | 'medicine'
+  | 'shelter'
+  | 'missing_person'
+  | 'information';
+export type IncidentPriority = 'low' | 'medium' | 'high' | 'critical';
+export type IncidentStatus =
+  | 'received'
+  | 'verified'
+  | 'assigned'
+  | 'dispatched'
+  | 'in_progress'
+  | 'resolved';
 
 export interface Deal {
   id: string;
@@ -389,6 +407,20 @@ export interface Deal {
   contact?: Contact;
   stage?: PipelineStage;
   assignee?: Profile;
+  request_id: string;
+  category: IncidentCategory;
+  requester_name?: string | null;
+  location?: string | null;
+  landmark?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  people_affected: number;
+  priority: IncidentPriority;
+  incident_status: IncidentStatus;
+  description?: string | null;
+  assigned_team?: string | null;
+  assigned_resource?: string | null;
+  resolved_at?: string | null;
 }
 
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';

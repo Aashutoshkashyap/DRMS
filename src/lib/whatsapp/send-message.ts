@@ -88,6 +88,8 @@ export interface SendMessageParams {
   /** Structured payload for `messageType === 'interactive'`. */
   interactivePayload?: InteractiveMessagePayload | null;
   replyToMessageId?: string | null;
+  /** Bot messages are persisted as bot and do not pause unrelated flows. */
+  senderType?: 'agent' | 'bot';
 }
 
 export interface SendMessageResult {
@@ -201,6 +203,7 @@ export async function sendMessageToConversation(
     templateMessageParams,
     interactivePayload,
     replyToMessageId,
+    senderType = 'agent',
   } = params;
 
   if (!conversationId) {
@@ -472,7 +475,7 @@ export async function sendMessageToConversation(
     .from('messages')
     .insert({
       conversation_id: conversationId,
-      sender_type: 'agent',
+      sender_type: senderType,
       content_type: messageType,
       content_text: persistedText,
       media_url: mediaUrl || null,
@@ -511,7 +514,7 @@ export async function sendMessageToConversation(
 
   // Pause any active Flow run for this contact — the agent stepping in
   // is the strongest "yield, human is here" signal. Best-effort.
-  try {
+  if (senderType === 'agent') try {
     const { error: pauseErr } = await supabaseAdmin()
       .from('flow_runs')
       .update({

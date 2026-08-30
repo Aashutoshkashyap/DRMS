@@ -18,9 +18,6 @@ import type { Deal, PipelineStage } from "@/types";
 import { DealCard } from "./deal-card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
-import { formatCurrency } from "@/lib/currency";
-import { useTranslations } from "next-intl";
 
 interface PipelineBoardProps {
   stages: PipelineStage[];
@@ -37,7 +34,6 @@ export function PipelineBoard({
   onAddDeal,
   onEditDeal,
 }: PipelineBoardProps) {
-  const { defaultCurrency } = useAuth();
   const [activeDealId, setActiveDealId] = useState<string | null>(null);
 
   const sortedStages = useMemo(
@@ -106,17 +102,13 @@ export function PipelineBoard({
       <div className="pipeline-scroll flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 lg:snap-none">
         {sortedStages.map((stage) => {
           const stageDeals = dealsByStage.get(stage.id) ?? [];
-          const totalValue = stageDeals.reduce(
-            (s, d) => s + Number(d.value || 0),
-            0,
-          );
+          const peopleAffected = stageDeals.reduce((sum, request) => sum + request.people_affected, 0);
           return (
             <StageColumn
               key={stage.id}
               stage={stage}
               deals={stageDeals}
-              totalValue={totalValue}
-              currency={defaultCurrency}
+              peopleAffected={peopleAffected}
               onAddDeal={onAddDeal}
               onEditDeal={onEditDeal}
             />
@@ -189,19 +181,16 @@ export function PipelineBoard({
 function StageColumn({
   stage,
   deals,
-  totalValue,
-  currency,
+  peopleAffected,
   onAddDeal,
   onEditDeal,
 }: {
   stage: PipelineStage;
   deals: Deal[];
-  totalValue: number;
-  currency: string;
+  peopleAffected: number;
   onAddDeal: (stageId: string) => void;
   onEditDeal: (deal: Deal) => void;
 }) {
-  const t = useTranslations("Pipelines.board");
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
   return (
@@ -226,7 +215,7 @@ function StageColumn({
         </span>
       </div>
       <p className="text-xs text-muted-foreground">
-        {formatCurrency(totalValue, currency)}
+        {peopleAffected} people affected
       </p>
 
       <div
@@ -239,7 +228,7 @@ function StageColumn({
       >
         {deals.length === 0 ? (
           <div className="flex flex-1 items-center justify-center rounded-lg border-2 border-dashed border-border py-10 text-xs text-muted-foreground">
-            {t("dropDealHere")}
+            Drop a request here
           </div>
         ) : (
           deals.map((deal) => (
@@ -260,7 +249,7 @@ function StageColumn({
         className="mt-3 w-full justify-start border border-dashed border-border bg-transparent text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
       >
         <Plus className="mr-1 h-3 w-3" />
-        {t("addDeal")}
+        Add request
       </Button>
     </div>
   );

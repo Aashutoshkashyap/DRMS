@@ -9,7 +9,8 @@ import type {
   Contact,
   Conversation,
   Deal,
-  DealStatus,
+  IncidentCategory,
+  IncidentPriority,
   PipelineStage,
   Profile,
 } from "@/types";
@@ -24,14 +25,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Check,
-  X,
   Trash2,
   MessageSquare,
   DollarSign,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { requestIncidentStatusNotification } from "@/lib/incidents/request-notification-client";
 import { useTranslations } from "next-intl";
 
 interface DealFormProps {
@@ -65,6 +64,15 @@ export function DealForm({
   const [assignedTo, setAssignedTo] = useState("");
   const [expectedCloseDate, setExpectedCloseDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [category, setCategory] = useState<IncidentCategory>("information");
+  const [location, setLocation] = useState("");
+  const [landmark, setLandmark] = useState("");
+  const [latitude, setLatitude] = useState("");
+  const [longitude, setLongitude] = useState("");
+  const [peopleAffected, setPeopleAffected] = useState("1");
+  const [priority, setPriority] = useState<IncidentPriority>("medium");
+  const [assignedTeam, setAssignedTeam] = useState("");
+  const [assignedResource, setAssignedResource] = useState("");
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -72,7 +80,6 @@ export function DealForm({
     useState<Conversation | null>(null);
 
   const [saving, setSaving] = useState(false);
-  const [statusAction, setStatusAction] = useState<DealStatus | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -94,6 +101,15 @@ export function DealForm({
       setAssignedTo(deal.assigned_to ?? "");
       setExpectedCloseDate(deal.expected_close_date ?? "");
       setNotes(deal.notes ?? "");
+      setCategory(deal.category ?? "information");
+      setLocation(deal.location ?? "");
+      setLandmark(deal.landmark ?? "");
+      setLatitude(deal.latitude?.toString() ?? "");
+      setLongitude(deal.longitude?.toString() ?? "");
+      setPeopleAffected(String(deal.people_affected ?? 1));
+      setPriority(deal.priority ?? "medium");
+      setAssignedTeam(deal.assigned_team ?? "");
+      setAssignedResource(deal.assigned_resource ?? "");
     } else {
       setTitle("");
       setValue("");
@@ -103,6 +119,8 @@ export function DealForm({
       setAssignedTo("");
       setExpectedCloseDate("");
       setNotes("");
+      setCategory("information"); setLocation(""); setLandmark(""); setLatitude(""); setLongitude("");
+      setPeopleAffected("1"); setPriority("medium"); setAssignedTeam(""); setAssignedResource("");
     }
   }, [open, deal, defaultStageId, stages, defaultCurrency]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -152,7 +170,7 @@ export function DealForm({
   }, [open, contactId, supabase]);
 
   async function handleSave() {
-    if (!title.trim() || !contactId || !stageId) {
+    if (!title.trim() || !contactId || !stageId || !location.trim() || Number(peopleAffected) < 1) {
       toast.error(t("toastRequired"));
       return;
     }
@@ -168,6 +186,18 @@ export function DealForm({
       assigned_to: assignedTo || null,
       notes: notes.trim() || null,
       expected_close_date: expectedCloseDate || null,
+      conversation_id: linkedConversation?.id ?? null,
+      category,
+      requester_name: title.trim(),
+      location: location.trim(),
+      landmark: landmark.trim() || null,
+      latitude: latitude ? Number(latitude) : null,
+      longitude: longitude ? Number(longitude) : null,
+      people_affected: Math.floor(Number(peopleAffected)),
+      priority,
+      description: notes.trim() || null,
+      assigned_team: assignedTeam.trim() || null,
+      assigned_resource: assignedResource.trim() || null,
     };
 
     if (deal) {
@@ -206,26 +236,10 @@ export function DealForm({
     }
 
     setSaving(false);
-    toast.success(deal ? t("toastUpdated") : t("toastCreated"));
-    onOpenChange(false);
-    onSaved();
-  }
-
-  async function handleStatusChange(status: DealStatus) {
-    if (!deal) return;
-    setStatusAction(status);
-    const { error } = await supabase
-      .from("deals")
-      .update({ status })
-      .eq("id", deal.id);
-    setStatusAction(null);
-    if (error) {
-      toast.error(t("toastFailedStatus"));
-      return;
+    if (deal && stageId !== deal.stage_id && !(await requestIncidentStatusNotification(deal.id))) {
+      toast.error("Status changed, but the WhatsApp update could not be delivered. The failure was recorded for coordinator retry.");
     }
-    toast.success(
-      status === "won" ? t("toastMarkedWon") : status === "lost" ? t("toastMarkedLost") : t("toastReopened"),
-    );
+    toast.success(deal ? t("toastUpdated") : t("toastCreated"));
     onOpenChange(false);
     onSaved();
   }
@@ -254,20 +268,28 @@ export function DealForm({
         <div className="flex h-full flex-col">
           <SheetHeader className="border-b border-border/50 p-4">
             <SheetTitle className="text-popover-foreground">
-              {deal ? t("editDeal") : t("newDeal")}
+              {deal ? "Edit incident" : "New incident"}
             </SheetTitle>
           </SheetHeader>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t("title")}</Label>
+              <Label className="text-muted-foreground">Requester name</Label>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder={t("titlePlaceholder")}
+                placeholder="Requester name or incident title"
                 className="border-border bg-muted text-foreground"
               />
             </div>
+
+            {deal?.request_id && <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm"><span className="text-muted-foreground">Request ID </span><span className="font-semibold text-primary">{deal.request_id}</span></div>}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2"><Label className="text-muted-foreground">Service</Label><select value={category} onChange={(e) => setCategory(e.target.value as IncidentCategory)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="rescue">Rescue</option><option value="food_water">Food / Water</option><option value="medicine">Medicine</option><option value="shelter">Shelter</option><option value="missing_person">Missing person</option><option value="information">Information</option></select></div>
+              <div className="grid gap-2"><Label className="text-muted-foreground">Priority</Label><select value={priority} onChange={(e) => setPriority(e.target.value as IncidentPriority)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3"><div className="grid gap-2"><Label className="text-muted-foreground">Location</Label><Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Municipality, ward" className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">Landmark</Label><Input value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Nearby landmark" className="border-border bg-muted text-foreground" /></div></div>
+            <div className="grid grid-cols-3 gap-3"><div className="grid gap-2"><Label className="text-muted-foreground">Latitude</Label><Input type="number" step="any" value={latitude} onChange={(e) => setLatitude(e.target.value)} className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">Longitude</Label><Input type="number" step="any" value={longitude} onChange={(e) => setLongitude(e.target.value)} className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">People affected</Label><Input type="number" min="1" value={peopleAffected} onChange={(e) => setPeopleAffected(e.target.value)} className="border-border bg-muted text-foreground" /></div></div>
 
             <div className="grid gap-2">
               <Label className="text-muted-foreground">{t("contact")}</Label>
@@ -290,10 +312,11 @@ export function DealForm({
                   className="mt-1 inline-flex items-center gap-1.5 self-start rounded-md bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20"
                 >
                   <MessageSquare className="h-3 w-3" />
-                  {t("linkToConversation")}
+                  Open communication history
                 </Link>
               )}
             </div>
+            <div className="grid grid-cols-2 gap-3"><div className="grid gap-2"><Label className="text-muted-foreground">Assigned team</Label><Input value={assignedTeam} onChange={(e) => setAssignedTeam(e.target.value)} placeholder="Coordinator confirms" className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">Vehicle / resource</Label><Input value={assignedResource} onChange={(e) => setAssignedResource(e.target.value)} placeholder="Coordinator confirms" className="border-border bg-muted text-foreground" /></div></div>
 
             <div className="grid grid-cols-[1fr_110px] gap-3">
               <div className="grid gap-2">
@@ -376,56 +399,7 @@ export function DealForm({
               />
             </div>
 
-            {deal && (
-              <div className="space-y-2 rounded-lg border border-border bg-muted/50 p-3">
-                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  {t("status")}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => handleStatusChange("won")}
-                    disabled={!!statusAction || deal.status === "won"}
-                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {statusAction === "won" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Check className="mr-1 h-4 w-4" />
-                        {t("markAsWon")}
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => handleStatusChange("lost")}
-                    disabled={!!statusAction || deal.status === "lost"}
-                    className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {statusAction === "lost" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <X className="mr-1 h-4 w-4" />
-                        {t("markAsLost")}
-                      </>
-                    )}
-                  </Button>
-                </div>
-                {deal.status && deal.status !== "open" && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => handleStatusChange("open")}
-                    disabled={!!statusAction}
-                    className="w-full text-muted-foreground hover:text-foreground"
-                  >
-                    {t("reopenDeal")}
-                  </Button>
-                )}
-              </div>
-            )}
+            {deal && <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">Move the request on the board to change its status. Verification, assignment, and dispatch remain human coordinator decisions.</div>}
           </div>
 
           <div className="border-t border-border/50 bg-popover/80 p-4">
