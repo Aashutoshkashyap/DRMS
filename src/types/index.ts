@@ -275,10 +275,14 @@ export interface MessageReaction {
 export interface WhatsAppConfig {
   id: string;
   user_id: string;
-  phone_number_id: string;
+  phone_number_id?: string | null;
   waba_id?: string;
-  access_token: string;
+  access_token?: string | null;
   verify_token?: string;
+  /** Meta Cloud API remains the default; OpenWA uses server-held gateway
+   * credentials and stores only the account routing session id here. */
+  transport?: 'meta' | 'openwa';
+  openwa_session_id?: string | null;
   status: 'connected' | 'disconnected';
   connected_at?: string;
   /**

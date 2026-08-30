@@ -118,3 +118,13 @@ If the intended work is instead a migration to a different stack, database, host
 - Reuse the signed, idempotent inbound webhook and existing contact, conversation, message, interactive-send, and incident-pipeline infrastructure.
 - Add a deterministic channel-neutral intake session with a WhatsApp adapter for service selection, minimum detail collection, request creation, confirmation, follow-up messages, and citizen-owned status lookup.
 - Queue coordinator-created incident status changes in the database and send the corresponding WhatsApp update through an authenticated server route. No citizen input can verify, assign, dispatch, or resolve an incident.
+
+### Phase 4A — OpenWA transport gateway
+
+**Status:** Implemented; requires migration 043, persistent OpenWA hosting, and manual WhatsApp pairing.
+
+- Preserve the existing Meta transport and account-scoped WhatsApp configuration; add OpenWA as an explicit per-account transport choice.
+- Reuse the existing CRM contact, conversation, message, deterministic emergency intake, coordinator reply, and incident-status delivery paths.
+- Use signed, idempotent `message.received` webhooks at `/api/whatsapp/openwa/webhook`; process plain text only and never invoke the optional AI reply system for OpenWA inbound traffic.
+- Keep OpenWA API credentials and webhook HMAC secret in server-side deployment configuration. Store only the non-secret gateway session id in the existing `whatsapp_config` row.
+- Run OpenWA separately from Vercel on a persistent host. Its session state is transport infrastructure; Supabase remains the single source of operational truth.

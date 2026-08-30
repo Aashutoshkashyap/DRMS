@@ -20,6 +20,9 @@ export interface WhatsAppEmergencyInbound {
   contactId: string;
   conversationId: string;
   inboundMessageId: string;
+  /** OpenWA's MVP transport accepts text, so it uses deterministic numeric
+   * and YES/NO fallbacks for the existing menu/confirmation prompts. */
+  transport?: "meta" | "openwa";
   input: ChannelInboundMessage;
 }
 
@@ -37,7 +40,15 @@ async function sendReply(
   accountId: string,
   conversationId: string,
   prompt: ChannelReply,
+  transport: "meta" | "openwa" = "meta",
 ) {
+  if (transport === "openwa" && prompt.kind !== "text") {
+    const fallback = prompt.kind === "buttons"
+      ? `${prompt.body}\n\nReply YES to submit your request or NO to cancel.`
+      : `${prompt.body}\n\n${prompt.sections?.flatMap((section) => section.rows.map((row, index) => `${index + 1}. ${row.title}${row.description ? ` — ${row.description}` : ""}`)).join("\n") ?? ""}\n\nReply with a number.`;
+    await sendMessageToConversation(db, accountId, { conversationId, messageType: "text", contentText: fallback, senderType: "bot" });
+    return;
+  }
   if (prompt.kind === "text") {
     await sendMessageToConversation(db, accountId, { conversationId, messageType: "text", contentText: prompt.body, senderType: "bot" });
     return;
@@ -57,6 +68,31 @@ async function sendReply(
     senderType: "bot",
     interactivePayload: { kind: "list", body: prompt.body, button_label: "Choose service", sections: prompt.sections ?? [] },
   });
+}
+
+function normalizeOpenWaInput(
+  state: IntakeState | null,
+  input: ChannelInboundMessage,
+): ChannelInboundMessage {
+  const value = input.text?.trim().toLowerCase();
+  if (!value || input.interactionId) return input;
+  if (!state || state === "start") {
+    const choice: Record<string, string> = {
+      "1": "emergency:service:rescue",
+      "2": "emergency:service:food_water",
+      "3": "emergency:service:medicine",
+      "4": "emergency:service:shelter",
+      "5": "emergency:service:missing_person",
+      "6": "emergency:service:information",
+      "7": "emergency:status",
+    };
+    if (choice[value]) return { ...input, interactionId: choice[value] };
+  }
+  if (state === "confirm_request") {
+    if (["yes", "y", "submit", "confirm"].includes(value)) return { ...input, interactionId: "emergency:confirm" };
+    if (["no", "n", "cancel"].includes(value)) return { ...input, interactionId: "emergency:cancel" };
+  }
+  return input;
 }
 
 function statusText(request: IncidentRequestSummary): string {
@@ -115,6 +151,7 @@ async function saveSession(
  * message before this runs, so a Meta replay cannot create a second request.
  */
 export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInbound): Promise<{ consumed: boolean }> {
+  const transport = input.transport ?? "meta";
   let session = await loadSession(input.db, input.accountId, input.conversationId);
   if (!session && !isExplicitEmergencyStart(input.input)) return { consumed: false };
   session ??= await createSession(input.db, input.accountId, input.contactId, input.conversationId);
@@ -122,14 +159,17 @@ export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInb
   const activeSession = session.state !== "start" && session.state !== "waiting_for_coordinator";
   if (!activeSession && !isExplicitEmergencyStart(input.input)) return { consumed: false };
 
-  const locationText = input.input.location
-    ? input.input.location.name ?? input.input.location.address ?? `${input.input.location.latitude.toFixed(5)}, ${input.input.location.longitude.toFixed(5)}`
-    : input.input.text;
+  const channelInput = transport === "openwa"
+    ? normalizeOpenWaInput(session.state, input.input)
+    : input.input;
+  const locationText = channelInput.location
+    ? channelInput.location.name ?? channelInput.location.address ?? `${channelInput.location.latitude.toFixed(5)}, ${channelInput.location.longitude.toFixed(5)}`
+    : channelInput.text;
   const transition = transitionIntake(session.state, session.collected_data ?? {}, {
     text: locationText,
-    interactionId: input.input.interactionId,
-    latitude: input.input.location?.latitude,
-    longitude: input.input.location?.longitude,
+    interactionId: channelInput.interactionId,
+    latitude: channelInput.location?.latitude,
+    longitude: channelInput.location?.longitude,
   });
   if (!transition) return { consumed: false };
 
@@ -137,7 +177,7 @@ export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInb
     const data = transition.data;
     if (!data.category || !data.requesterName || !data.location || !data.description || !data.peopleAffected) {
       await saveSession(input.db, session.id, "start", {}, input.inboundMessageId);
-      await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: "Your request details were incomplete. Reply START to begin again." });
+      await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: "Your request details were incomplete. Reply START to begin again." }, transport);
       return { consumed: true };
     }
     const request = await createIncidentRequest(input.db, {
@@ -155,7 +195,7 @@ export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInb
       longitude: data.longitude ?? null,
     });
     await saveSession(input.db, session.id, "waiting_for_coordinator", data, input.inboundMessageId, request.id);
-    await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: `✅ Request received.\n\nRequest ID: ${request.request_id}\n\nWe are checking your request. Please keep this number for reference.` });
+    await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: `✅ Request received.\n\nRequest ID: ${request.request_id}\n\nWe are checking your request. Please keep this number for reference.` }, transport);
     if (data.category === "information" && data.latitude != null && data.longitude != null) {
       const nearby = await findNearestVerifiedLocations(input.db, input.accountId, { latitude: data.latitude, longitude: data.longitude });
       const lines = [
@@ -163,7 +203,7 @@ export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInb
         nearby.shelter && `Nearest available shelter: ${nearby.shelter.name} (${nearby.shelter.distanceKm.toFixed(1)} km)`,
         nearby.medicalFacility && `Nearest medical facility: ${nearby.medicalFacility.name} (${nearby.medicalFacility.distanceKm.toFixed(1)} km)`,
       ].filter(Boolean);
-      if (lines.length) await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: lines.join("\n") });
+      if (lines.length) await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: lines.join("\n") }, transport);
     }
     return { consumed: true };
   }
@@ -177,18 +217,18 @@ export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInb
     );
     if (request) {
       await saveSession(input.db, session.id, "waiting_for_coordinator", transition.data, input.inboundMessageId, request.id);
-      await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: statusText(request) });
+      await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: statusText(request) }, transport);
     } else if (transition.action === "check_active_request") {
       await saveSession(input.db, session.id, "collect_request_id", transition.data, input.inboundMessageId);
-      await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: "No active request was found for this WhatsApp number. Enter your Request ID." });
+      await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: "No active request was found for this WhatsApp number. Enter your Request ID." }, transport);
     } else {
       await saveSession(input.db, session.id, "collect_request_id", transition.data, input.inboundMessageId);
-      await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: "That Request ID was not found for this WhatsApp number. Check it and try again." });
+      await sendReply(input.db, input.accountId, input.conversationId, { kind: "text", body: "That Request ID was not found for this WhatsApp number. Check it and try again." }, transport);
     }
     return { consumed: true };
   }
 
   await saveSession(input.db, session.id, transition.state, transition.data, input.inboundMessageId);
-  await sendReply(input.db, input.accountId, input.conversationId, asWhatsAppReply(transition.prompt));
+  await sendReply(input.db, input.accountId, input.conversationId, asWhatsAppReply(transition.prompt), transport);
   return { consumed: true };
 }

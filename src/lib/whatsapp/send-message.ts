@@ -42,6 +42,7 @@ import {
   phoneVariants,
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils';
+import { sendOpenWaText } from '@/lib/whatsapp/openwa';
 import type { MessageTemplate } from '@/types';
 import {
   resolveTemplateRow,
@@ -269,10 +270,24 @@ export async function sendMessageToConversation(
     );
   }
 
-  const accessToken = decrypt(config.access_token);
+  const transport = config.transport ?? 'meta';
+  if (transport !== 'meta' && transport !== 'openwa') {
+    throw new SendMessageError('whatsapp_not_configured', 'Unsupported WhatsApp transport configuration.', 400);
+  }
+  if (transport === 'openwa' && !config.openwa_session_id) {
+    throw new SendMessageError('whatsapp_not_configured', 'OpenWA session is not configured for this account.', 400);
+  }
 
-  // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent.
-  if (isLegacyFormat(config.access_token)) {
+  let accessToken = '';
+  if (transport === 'meta') try {
+    accessToken = decrypt(config.access_token);
+  } catch {
+    throw new SendMessageError('whatsapp_not_configured', 'The Meta access token cannot be decrypted. Re-save the WhatsApp configuration.', 400);
+  }
+
+  // Self-heal legacy CBC ciphertexts. Fire-and-forget; idempotent. OpenWA
+  // keeps its API key in the deployment environment, not this table.
+  if (transport === 'meta' && isLegacyFormat(config.access_token)) {
     void db
       .from('whatsapp_config')
       .update({ access_token: encrypt(accessToken) })
@@ -340,6 +355,21 @@ export async function sendMessageToConversation(
   }
 
   const attempt = async (phone: string): Promise<string> => {
+    if (transport === 'openwa') {
+      if (messageType !== 'text') {
+        throw new SendMessageError(
+          'unsupported_transport_message',
+          'The OpenWA MVP supports text messages only. Use a text reply for this conversation.',
+          400,
+        );
+      }
+      const result = await sendOpenWaText({
+        sessionId: config.openwa_session_id!,
+        to: phone,
+        text: contentText!,
+      });
+      return result.messageId;
+    }
     if (messageType === 'template') {
       const result = await sendTemplateMessage({
         phoneNumberId: config.phone_number_id,
@@ -405,42 +435,47 @@ export async function sendMessageToConversation(
     return result.messageId;
   };
 
-  // Send via Meta — retry across phone-number variants if Meta rejects
-  // with "recipient not in allowed list"; persist a working variant
-  // back to the contact so the next send goes straight through.
+  // Send via the account's configured transport. Meta retains its historic
+  // phone-variant recovery; OpenWA receives the original normalized phone.
   let waMessageId = '';
   let workingPhone = sanitizedPhone;
   try {
-    const variants = phoneVariants(sanitizedPhone);
-    let lastError: unknown = null;
+    if (transport === 'openwa') {
+      waMessageId = await attempt(sanitizedPhone);
+    } else {
+      const variants = phoneVariants(sanitizedPhone);
+      let lastError: unknown = null;
 
-    for (const variant of variants) {
-      try {
-        waMessageId = await attempt(variant);
-        workingPhone = variant;
-        lastError = null;
-        break;
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (!isRecipientNotAllowedError(message)) {
-          throw err;
+      for (const variant of variants) {
+        try {
+          waMessageId = await attempt(variant);
+          workingPhone = variant;
+          lastError = null;
+          break;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (!isRecipientNotAllowedError(message)) {
+            throw err;
+          }
+          lastError = err;
+          console.warn(
+            `[send-message] variant "${variant}" rejected by Meta, trying next…`
+          );
         }
-        lastError = err;
-        console.warn(
-          `[send-message] variant "${variant}" rejected by Meta, trying next…`
-        );
       }
-    }
 
-    if (lastError) throw lastError;
+      if (lastError) throw lastError;
+    }
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : 'Unknown Meta API error';
-    console.error('[send-message] Meta send failed for all variants:', message);
-    throw new SendMessageError('meta_error', `Meta API error: ${message}`, 502);
+      err instanceof Error ? err.message : 'Unknown WhatsApp transport error';
+    console.error('[send-message] outbound send failed:', message);
+    throw err instanceof SendMessageError
+      ? err
+      : new SendMessageError('whatsapp_transport_error', `WhatsApp transport error: ${message}`, 502);
   }
 
-  if (workingPhone !== sanitizedPhone) {
+  if (transport === 'meta' && workingPhone !== sanitizedPhone) {
     console.log(
       `[send-message] Auto-corrected contact phone: ${sanitizedPhone} → ${workingPhone}`
     );

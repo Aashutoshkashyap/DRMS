@@ -7,6 +7,7 @@ import {
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
+import { getOpenWaSession, openWaPhoneMatchesConfiguredNumber } from '@/lib/whatsapp/openwa'
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here
@@ -87,7 +88,7 @@ export async function GET() {
 
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token, status')
+      .select('phone_number_id, access_token, status, transport, openwa_session_id')
       .eq('account_id', accountId)
       .maybeSingle()
 
@@ -108,6 +109,26 @@ export async function GET() {
         },
         { status: 200 }
       )
+    }
+
+    if (config.transport === 'openwa') {
+      if (!config.openwa_session_id) {
+        return NextResponse.json({ connected: false, reason: 'openwa_session_missing', message: 'OpenWA session is not configured.' })
+      }
+      try {
+        const session = await getOpenWaSession(config.openwa_session_id)
+        const phoneMatches = openWaPhoneMatchesConfiguredNumber(session.phone)
+        const connected = session.status === 'ready' && phoneMatches
+        return NextResponse.json({
+          connected,
+          transport: 'openwa',
+          session,
+          message: connected ? undefined : phoneMatches ? `OpenWA session is ${session.status}.` : 'OpenWA session phone does not match WHATSAPP_PHONE_NUMBER.',
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown OpenWA error'
+        return NextResponse.json({ connected: false, transport: 'openwa', reason: 'openwa_api_error', message })
+      }
     }
 
     // Try to decrypt the stored token with the current ENCRYPTION_KEY.
@@ -185,7 +206,65 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { phone_number_id, waba_id, access_token, verify_token, pin } = body
+    const { phone_number_id, waba_id, access_token, verify_token, pin, openwa_session_id } = body
+    const transport = body.transport === 'openwa' ? 'openwa' : 'meta'
+
+    if (transport === 'openwa') {
+      if (typeof openwa_session_id !== 'string' || !openwa_session_id.trim()) {
+        return NextResponse.json({ error: 'openwa_session_id is required for OpenWA.' }, { status: 400 })
+      }
+      const sessionId = openwa_session_id.trim()
+      const { data: claimed, error: claimedError } = await supabaseAdmin()
+        .from('whatsapp_config')
+        .select('account_id')
+        .eq('transport', 'openwa')
+        .eq('openwa_session_id', sessionId)
+        .neq('account_id', accountId)
+        .maybeSingle()
+      if (claimedError) return NextResponse.json({ error: 'Failed to validate OpenWA session' }, { status: 500 })
+      if (claimed) return NextResponse.json({ error: 'This OpenWA session is already linked to another account.' }, { status: 409 })
+
+      let session
+      try {
+        session = await getOpenWaSession(sessionId)
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : 'Could not verify OpenWA session' }, { status: 400 })
+      }
+      if (session.status !== 'ready') {
+        return NextResponse.json({ error: `OpenWA session is ${session.status}; connect it before saving.` }, { status: 400 })
+      }
+      if (!openWaPhoneMatchesConfiguredNumber(session.phone)) {
+        return NextResponse.json({ error: 'OpenWA session phone does not match WHATSAPP_PHONE_NUMBER.' }, { status: 400 })
+      }
+
+      const { data: existing } = await supabase
+        .from('whatsapp_config')
+        .select('id')
+        .eq('account_id', accountId)
+        .maybeSingle()
+      const row = {
+        transport: 'openwa',
+        openwa_session_id: sessionId,
+        phone_number_id: null,
+        waba_id: null,
+        access_token: null,
+        verify_token: null,
+        status: 'connected',
+        connected_at: new Date().toISOString(),
+        registered_at: null,
+        subscribed_apps_at: null,
+        last_registration_error: null,
+        updated_at: new Date().toISOString(),
+      }
+      const result = existing
+        ? await supabase.from('whatsapp_config').update(row).eq('account_id', accountId)
+        : await supabase.from('whatsapp_config').insert({ account_id: accountId, user_id: user.id, ...row })
+      if (result.error) {
+        console.error('Error saving OpenWA configuration:', result.error)
+        return NextResponse.json({ error: 'Failed to save OpenWA configuration' }, { status: 500 })
+      }
+      return NextResponse.json({ success: true, saved: true, registered: true, transport: 'openwa', session })
+    }
 
     if (!access_token || !phone_number_id) {
       return NextResponse.json(
@@ -354,6 +433,8 @@ export async function POST(request: Request) {
     // store the credentials and the error so the UI can guide the
     // user through a retry.
     const baseRow = {
+      transport: 'meta',
+      openwa_session_id: null,
       phone_number_id,
       waba_id: waba_id || null,
       access_token: encryptedAccessToken,

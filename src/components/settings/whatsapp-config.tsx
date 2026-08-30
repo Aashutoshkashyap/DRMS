@@ -76,6 +76,8 @@ export function WhatsAppConfig() {
   const [verifyToken, setVerifyToken] = useState('');
   const [pin, setPin] = useState('');
   const [tokenEdited, setTokenEdited] = useState(false);
+  const [transport, setTransport] = useState<'meta' | 'openwa'>('meta');
+  const [openWaSessionId, setOpenWaSessionId] = useState('');
 
   // Inbound-media mirror (issue #466). Unlike everything else on this
   // page it is NOT part of handleSave: that path insists on re-entering
@@ -108,7 +110,7 @@ export function WhatsAppConfig() {
 
   const webhookUrl =
     typeof window !== 'undefined'
-      ? `${window.location.origin}/api/whatsapp/webhook`
+      ? `${window.location.origin}${transport === 'openwa' ? '/api/whatsapp/openwa/webhook' : '/api/whatsapp/webhook'}`
       : '';
 
   const fetchConfig = useCallback(async (acctId: string) => {
@@ -132,6 +134,8 @@ export function WhatsAppConfig() {
 
       if (data) {
         setConfig(data);
+        setTransport(data.transport === 'openwa' ? 'openwa' : 'meta');
+        setOpenWaSessionId(data.openwa_session_id || '');
         setPhoneNumberId(data.phone_number_id || '');
         setWabaId(data.waba_id || '');
         setAccessToken(MASKED_TOKEN);
@@ -143,6 +147,8 @@ export function WhatsAppConfig() {
         setMirrorMedia(data.mirror_inbound_media !== false);
       } else {
         setConfig(null);
+        setTransport('meta');
+        setOpenWaSessionId('');
         setPhoneNumberId('');
         setWabaId('');
         setAccessToken('');
@@ -227,6 +233,33 @@ export function WhatsAppConfig() {
   }
 
   async function handleSave() {
+    if (transport === 'openwa') {
+      if (!openWaSessionId.trim()) {
+        toast.error('OpenWA Session ID is required');
+        return;
+      }
+      try {
+        setSaving(true);
+        const res = await fetch('/api/whatsapp/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transport: 'openwa', openwa_session_id: openWaSessionId.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || 'Failed to save OpenWA configuration');
+          return;
+        }
+        toast.success('OpenWA session is connected.');
+        if (accountId) await fetchConfig(accountId);
+      } catch (err) {
+        console.error('OpenWA save error:', err);
+        toast.error('Failed to save OpenWA configuration');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     if (!phoneNumberId.trim()) {
       toast.error('Phone Number ID is required');
       return;
@@ -394,6 +427,8 @@ export function WhatsAppConfig() {
 
       toast.success('Configuration cleared. You can now re-enter your credentials.');
       setConfig(null);
+      setTransport('meta');
+      setOpenWaSessionId('');
       setPhoneNumberId('');
       setWabaId('');
       setAccessToken('');
@@ -500,7 +535,7 @@ export function WhatsAppConfig() {
             without a successful /register call the number won't
             receive inbound events. Surface this dimension separately
             so users don't trust a misleading green banner. */}
-        {config && (
+        {config && config.transport !== 'openwa' && (
           <Alert
             className={
               isRegistered
@@ -608,6 +643,36 @@ export function WhatsAppConfig() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
+              <Label className="text-muted-foreground">Transport</Label>
+              <select
+                value={transport}
+                onChange={(event) => setTransport(event.target.value === 'openwa' ? 'openwa' : 'meta')}
+                className="flex h-9 w-full rounded-md border border-border bg-muted px-3 text-sm text-foreground"
+              >
+                <option value="meta">Meta WhatsApp Cloud API</option>
+                <option value="openwa">OpenWA gateway</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                OpenWA is a persistent transport gateway. DRMS remains the source of truth for messages, incidents, and coordinator decisions.
+              </p>
+            </div>
+
+            {transport === 'openwa' ? (
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">OpenWA Session ID</Label>
+                <Input
+                  placeholder="e.g. drms-nepal"
+                  value={openWaSessionId}
+                  onChange={(event) => setOpenWaSessionId(event.target.value)}
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Create and connect this session on the OpenWA gateway first. DRMS verifies it is ready before saving.
+                </p>
+              </div>
+            ) : (
+              <>
+            <div className="space-y-2">
               <Label className="text-muted-foreground">{t('phoneNumberId')}</Label>
               <Input
                 placeholder="e.g. 100234567890123"
@@ -694,6 +759,8 @@ export function WhatsAppConfig() {
                 <span dangerouslySetInnerHTML={{ __html: t('pinHint') }} />
               </p>
             </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -730,7 +797,7 @@ export function WhatsAppConfig() {
         {/* Attachment retention. Only meaningful once a number is
             connected, since it governs what the webhook does with
             inbound media. */}
-        {config && (
+        {config && config.transport !== 'openwa' && (
           <Card>
             <CardHeader>
               <CardTitle className="text-foreground">{t('mediaTitle')}</CardTitle>
