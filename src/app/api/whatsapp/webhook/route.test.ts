@@ -297,6 +297,9 @@ describe('inbound webhook: idempotent insert (#367)', () => {
     // Downstream side effects ran exactly once.
     expect(h.state.rpcCalls).toHaveLength(1)
     expect(h.dispatchInboundToFlows).toHaveBeenCalledTimes(1)
+    // Regression boundary for DRMS: ordinary inbound text must never enter
+    // the inherited optional AI auto-reply dispatcher.
+    expect(h.dispatchInboundToAiReply).not.toHaveBeenCalled()
     expect(h.dispatchWebhookEvent).toHaveBeenCalledTimes(1)
   })
 

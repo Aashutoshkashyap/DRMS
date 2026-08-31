@@ -9,7 +9,6 @@ import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import {
   Bell,
-  Bot,
   Crown,
   GitBranch,
   LayoutDashboard,
@@ -24,6 +23,7 @@ import {
   UsersRound,
   Workflow,
   MapPinned,
+  ListChecks,
   X,
   Zap,
 } from "lucide-react";
@@ -97,10 +97,10 @@ const navItems: NavItem[] = [
   { href: "/contacts", labelKey: "contacts", icon: Users },
   { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
   { href: "/resources", labelKey: "resources", icon: MapPinned },
+  { href: "/follow-up", labelKey: "followUp", icon: ListChecks },
   { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
-  { href: "/agents", labelKey: "aiAgents", icon: Bot },
 ];
 
 const bottomNavItems = [

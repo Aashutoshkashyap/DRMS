@@ -37,7 +37,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "demo:seed": "node scripts/demo-data.mjs seed",
+    "demo:reset": "node scripts/demo-data.mjs reset"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

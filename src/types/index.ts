@@ -155,6 +155,27 @@ export interface ContactNote {
   created_at: string;
 }
 
+/** Coordinator-authored, case-specific note. This is distinct from the
+ * reusable citizen/contact notes attached to a person. */
+export interface IncidentNote {
+  id: string;
+  account_id: string;
+  deal_id: string;
+  user_id: string;
+  note_text: string;
+  created_at: string;
+}
+
+export interface IncidentFollowUpSettings {
+  account_id: string;
+  received_after_hours: number | null;
+  assigned_after_hours: number | null;
+  dispatched_after_hours: number | null;
+  updated_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {

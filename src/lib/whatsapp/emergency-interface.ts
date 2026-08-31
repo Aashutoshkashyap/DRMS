@@ -153,15 +153,19 @@ async function saveSession(
 export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInbound): Promise<{ consumed: boolean }> {
   const transport = input.transport ?? "meta";
   let session = await loadSession(input.db, input.accountId, input.conversationId);
-  if (!session && !isExplicitEmergencyStart(input.input)) return { consumed: false };
+  // OpenWA renders the list and confirmation prompts as deterministic text
+  // fallbacks. Normalize those replies *before* checking whether this is an
+  // emergency start/continuation: otherwise its documented "Reply with a
+  // number" response is rejected while the persisted session is still in
+  // `start`, so the conversation can never advance past the first message.
+  const channelInput = transport === "openwa"
+    ? normalizeOpenWaInput(session?.state ?? null, input.input)
+    : input.input;
+  if (!session && !isExplicitEmergencyStart(channelInput)) return { consumed: false };
   session ??= await createSession(input.db, input.accountId, input.contactId, input.conversationId);
   if (session.last_inbound_message_id === input.inboundMessageId) return { consumed: true };
   const activeSession = session.state !== "start" && session.state !== "waiting_for_coordinator";
-  if (!activeSession && !isExplicitEmergencyStart(input.input)) return { consumed: false };
-
-  const channelInput = transport === "openwa"
-    ? normalizeOpenWaInput(session.state, input.input)
-    : input.input;
+  if (!activeSession && !isExplicitEmergencyStart(channelInput)) return { consumed: false };
   const locationText = channelInput.location
     ? channelInput.location.name ?? channelInput.location.address ?? `${channelInput.location.latitude.toFixed(5)}, ${channelInput.location.longitude.toFixed(5)}`
     : channelInput.text;

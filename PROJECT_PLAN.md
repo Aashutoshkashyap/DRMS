@@ -136,3 +136,31 @@ If the intended work is instead a migration to a different stack, database, host
 - Register the existing automation-wait and flow-timeout sweep routes as Vercel Cron jobs.
 - Accept Vercel's `Authorization: Bearer $CRON_SECRET` while preserving the existing external scheduler header for Docker deployments.
 - Use daily schedules compatible with Vercel Hobby; change the committed schedule to every five minutes after upgrading to Pro if short Wait-step precision is required.
+
+### Phase 5 — Deterministic WhatsApp automation safety
+
+**Status:** Implemented; validated by the application test suite.
+
+- Keep inbound WhatsApp on the existing authentication, contact/conversation/message persistence, idempotency, deterministic emergency-intake, Flow, and configured automation paths.
+- Remove the reachable inherited Meta AI auto-reply dispatch from the inbound webhook. OpenWA inbound already had no AI dispatch.
+- Preserve the existing human inbox for unmatched messages, the current WhatsApp transport, and configured non-AI automation. No SMS code, route, schema, or configuration is changed.
+- Status communications remain predefined templates, use current database-verified assignment data only, and record delivery idempotently.
+
+### Phase 6 — Guarded demo and DRMS operations UX
+
+**Status:** Implemented locally; migrations 044–045 must be applied before the new database-backed surfaces are used.
+
+- Fix the OpenWA multi-message state-machine defect by normalizing numeric service selections before the active-session gate; retain Meta behavior and exactly-once request creation.
+- Add `demo:seed` and `demo:reset`, both restricted to an explicitly flagged `accounts.is_demo = TRUE` account, an explicit member actor, and the `DEMO DATA` confirmation phrase. The seed tracks each created ID per run so reset has no broad delete path.
+- Add only fictional Nepal-context demo contacts, incidents, conversations, resources, teams, vehicles, relief centres, inventory, assignments, and a simulated failed status-delivery record. The seed never invokes WhatsApp, SMS, OpenWA, Meta, or a government source.
+- Refine coordinator terminology and primary navigation; hide inherited AI Agents from primary DRMS navigation without deleting inherited settings or code.
+- Replace revenue/value sales dashboard surfaces with the stored-data Operations Overview, active/critical/new/unassigned/dispatched/resolved counts, location summary, recent citizen communications, response status, and operational attention.
+- Add case-scoped `incident_notes`, resource/vehicle recommendations from coordinator-maintained availability and stored coordinates, coordinator-confirmed assignment inputs, and Follow-up Required for unassigned cases, failed deliveries, and only explicit age rules.
+- Document the strict `DEMO DATA -> normalized DRMS entities` boundary and the future official-data adapter boundary in `docs/demo-data.md`; no official-source integration is implemented.
+
+| Phase 6 verification | Result | Notes |
+| --- | --- | --- |
+| `npm run lint` | Passed | 0 errors; 35 inherited warnings remain outside this milestone. |
+| `npm run typecheck` | Passed | TypeScript compilation clean. |
+| `npm test` | Passed | 87 files / 851 tests, including Meta/OpenWA intake and new demo/follow-up unit coverage. |
+| `npm run build` | Environment-blocked | Next.js 16 reached “Creating an optimized production build”, then could not complete in this workspace because `next/font/google` must fetch Inter and outbound DNS/network access is restricted. No source build error was reported. |

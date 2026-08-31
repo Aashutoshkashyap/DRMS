@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { CURRENCIES } from "@/lib/currency";
 import type {
   Contact,
   Conversation,
@@ -24,14 +23,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Trash2,
-  MessageSquare,
-  DollarSign,
-} from "lucide-react";
+import { Trash2, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { requestIncidentStatusNotification } from "@/lib/incidents/request-notification-client";
 import { useTranslations } from "next-intl";
+import { IncidentNotes } from "@/components/incidents/incident-notes";
+import { ResourceRecommendations } from "@/components/incidents/resource-recommendations";
 
 interface DealFormProps {
   open: boolean;
@@ -54,16 +51,13 @@ export function DealForm({
 }: DealFormProps) {
   const t = useTranslations("Pipelines.form");
   const supabase = createClient();
-  const { accountId, defaultCurrency } = useAuth();
+  const { accountId } = useAuth();
 
   const [title, setTitle] = useState("");
-  const [value, setValue] = useState("");
-  const [currency, setCurrency] = useState(defaultCurrency);
   const [contactId, setContactId] = useState("");
   const [stageId, setStageId] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
-  const [expectedCloseDate, setExpectedCloseDate] = useState("");
-  const [notes, setNotes] = useState("");
+  const [description, setDescription] = useState("");
   const [category, setCategory] = useState<IncidentCategory>("information");
   const [location, setLocation] = useState("");
   const [landmark, setLandmark] = useState("");
@@ -76,6 +70,8 @@ export function DealForm({
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [teams, setTeams] = useState<Array<{ id: string; name: string; availability: string }>>([]);
+  const [vehicles, setVehicles] = useState<Array<{ id: string; identifier: string; vehicle_type: string; availability: string }>>([]);
   const [linkedConversation, setLinkedConversation] =
     useState<Conversation | null>(null);
 
@@ -92,15 +88,12 @@ export function DealForm({
     setConfirmDelete(false);
     if (deal) {
       setTitle(deal.title);
-      setValue(String(deal.value ?? ""));
-      setCurrency(deal.currency || defaultCurrency);
       // contact_id is nullable when the contact has been deleted
       // (migration 004: ON DELETE SET NULL). "" means "no selection".
       setContactId(deal.contact_id ?? "");
       setStageId(deal.stage_id);
       setAssignedTo(deal.assigned_to ?? "");
-      setExpectedCloseDate(deal.expected_close_date ?? "");
-      setNotes(deal.notes ?? "");
+      setDescription(deal.description ?? deal.notes ?? "");
       setCategory(deal.category ?? "information");
       setLocation(deal.location ?? "");
       setLandmark(deal.landmark ?? "");
@@ -112,17 +105,14 @@ export function DealForm({
       setAssignedResource(deal.assigned_resource ?? "");
     } else {
       setTitle("");
-      setValue("");
-      setCurrency(defaultCurrency);
       setContactId("");
       setStageId(defaultStageId || stages[0]?.id || "");
       setAssignedTo("");
-      setExpectedCloseDate("");
-      setNotes("");
+      setDescription("");
       setCategory("information"); setLocation(""); setLandmark(""); setLatitude(""); setLongitude("");
       setPeopleAffected("1"); setPriority("medium"); setAssignedTeam(""); setAssignedResource("");
     }
-  }, [open, deal, defaultStageId, stages, defaultCurrency]);
+  }, [open, deal, defaultStageId, stages]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Load supporting data once the sheet is open
@@ -130,13 +120,17 @@ export function DealForm({
     if (!open) return;
     let cancelled = false;
     (async () => {
-      const [c, p] = await Promise.all([
+      const [c, p, teamResult, vehicleResult] = await Promise.all([
         supabase.from("contacts").select("*").order("name"),
         supabase.from("profiles").select("*").order("full_name"),
+        supabase.from("response_teams").select("id,name,availability").order("name"),
+        supabase.from("vehicles").select("id,identifier,vehicle_type,availability").order("identifier"),
       ]);
       if (cancelled) return;
       setContacts((c.data ?? []) as Contact[]);
       setProfiles((p.data ?? []) as Profile[]);
+      setTeams((teamResult.data ?? []) as Array<{ id: string; name: string; availability: string }>);
+      setVehicles((vehicleResult.data ?? []) as Array<{ id: string; identifier: string; vehicle_type: string; availability: string }>);
     })();
     return () => {
       cancelled = true;
@@ -178,14 +172,13 @@ export function DealForm({
 
     const payload = {
       title: title.trim(),
-      value: parseFloat(value) || 0,
-      currency,
+      value: 0,
+      currency: "NPR",
       contact_id: contactId,
       pipeline_id: pipelineId,
       stage_id: stageId,
       assigned_to: assignedTo || null,
-      notes: notes.trim() || null,
-      expected_close_date: expectedCloseDate || null,
+      notes: description.trim() || null,
       conversation_id: linkedConversation?.id ?? null,
       category,
       requester_name: title.trim(),
@@ -195,7 +188,7 @@ export function DealForm({
       longitude: longitude ? Number(longitude) : null,
       people_affected: Math.floor(Number(peopleAffected)),
       priority,
-      description: notes.trim() || null,
+      description: description.trim() || null,
       assigned_team: assignedTeam.trim() || null,
       assigned_resource: assignedResource.trim() || null,
     };
@@ -316,50 +309,19 @@ export function DealForm({
                 </Link>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3"><div className="grid gap-2"><Label className="text-muted-foreground">Assigned team</Label><Input value={assignedTeam} onChange={(e) => setAssignedTeam(e.target.value)} placeholder="Coordinator confirms" className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">Vehicle / resource</Label><Input value={assignedResource} onChange={(e) => setAssignedResource(e.target.value)} placeholder="Coordinator confirms" className="border-border bg-muted text-foreground" /></div></div>
-
-            <div className="grid grid-cols-[1fr_110px] gap-3">
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">{t("value")}</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    type="number"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    placeholder="0"
-                    className="border-border bg-muted pl-7 text-foreground"
-                  />
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label className="text-muted-foreground">{t("currency")}</Label>
-                <select
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary"
-                >
-                  {CURRENCIES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.code}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <ResourceRecommendations
+              latitude={latitude ? Number(latitude) : null}
+              longitude={longitude ? Number(longitude) : null}
+              onChooseTeam={setAssignedTeam}
+              onChooseVehicle={setAssignedResource}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2"><Label className="text-muted-foreground">Assigned team</Label><select value={assignedTeam} onChange={(e) => setAssignedTeam(e.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="">No team assigned</option>{teams.filter((team) => team.availability === "available" || team.availability === "limited" || team.name === assignedTeam).map((team) => <option key={team.id} value={team.name}>{team.name} ({team.availability})</option>)}</select></div>
+              <div className="grid gap-2"><Label className="text-muted-foreground">Assigned vehicle / resource</Label><select value={assignedResource} onChange={(e) => setAssignedResource(e.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="">No vehicle assigned</option>{vehicles.filter((vehicle) => vehicle.availability === "available" || vehicle.availability === "limited" || vehicle.identifier === assignedResource).map((vehicle) => <option key={vehicle.id} value={vehicle.identifier}>{vehicle.vehicle_type} — {vehicle.identifier} ({vehicle.availability})</option>)}</select></div>
             </div>
 
             <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t("expectedCloseDate")}</Label>
-              <Input
-                type="date"
-                value={expectedCloseDate}
-                onChange={(e) => setExpectedCloseDate(e.target.value)}
-                className="border-border bg-muted text-foreground"
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t("stage")}</Label>
+              <Label className="text-muted-foreground">Response status</Label>
               <select
                 value={stageId}
                 onChange={(e) => setStageId(e.target.value)}
@@ -374,13 +336,13 @@ export function DealForm({
             </div>
 
             <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t("assignedTo")}</Label>
+              <Label className="text-muted-foreground">Coordinator</Label>
               <select
                 value={assignedTo}
                 onChange={(e) => setAssignedTo(e.target.value)}
                 className="h-9 w-full rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary"
               >
-                <option value="">{t("unassigned")}</option>
+                <option value="">Unassigned</option>
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.full_name || p.email}
@@ -390,14 +352,16 @@ export function DealForm({
             </div>
 
             <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t("notes")}</Label>
+              <Label className="text-muted-foreground">Incident description</Label>
               <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={t("notesPlaceholder")}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="What was reported or verified?"
                 className="min-h-[100px] border-border bg-muted text-foreground"
               />
             </div>
+
+            {deal && <IncidentNotes dealId={deal.id} />}
 
             {deal && <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">Move the request on the board to change its status. Verification, assignment, and dispatch remain human coordinator decisions.</div>}
           </div>
@@ -416,7 +380,7 @@ export function DealForm({
                 disabled={saving || !title.trim() || !contactId || !stageId}
                 className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                {saving ? t("saving") : deal ? t("saveChanges") : t("createDeal")}
+                {saving ? t("saving") : deal ? "Save incident" : "Create incident"}
               </Button>
             </div>
 
@@ -450,7 +414,7 @@ export function DealForm({
                   className="mt-3 flex w-full items-center justify-center gap-1 text-xs text-red-400 hover:text-red-300"
                 >
                   <Trash2 className="h-3 w-3" />
-                  {t("deleteDeal")}
+                  Delete incident
                 </button>
               ))}
           </div>
