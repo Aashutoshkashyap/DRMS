@@ -1,7 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ChannelInboundMessage, ChannelReply } from "@/lib/communications/channel";
 import { createIncidentRequest, findCitizenIncident, type IncidentRequestSummary } from "@/lib/incidents/request-service";
-import { incidentPriority, transitionIntake, type ChannelPrompt, type IntakeData, type IntakeState } from "@/lib/incidents/intake-state-machine";
+import {
+  hasDeterministicEmergencyIntent,
+  incidentPriority,
+  isUsableCitizenName,
+  transitionIntake,
+  type ChannelPrompt,
+  type IntakeData,
+  type IntakeState,
+} from "@/lib/incidents/intake-state-machine";
 import { sendMessageToConversation } from "./send-message";
 import { findNearestVerifiedLocations } from "@/lib/resources/nearby-information";
 
@@ -20,6 +28,8 @@ export interface WhatsAppEmergencyInbound {
   contactId: string;
   conversationId: string;
   inboundMessageId: string;
+  /** Existing contact name, only for this same conversation/account. */
+  knownRequesterName?: string | null;
   /** OpenWA's MVP transport accepts text, so it uses deterministic numeric
    * and YES/NO fallbacks for the existing menu/confirmation prompts. */
   transport?: "meta" | "openwa";
@@ -43,9 +53,13 @@ async function sendReply(
   transport: "meta" | "openwa" = "meta",
 ) {
   if (transport === "openwa" && prompt.kind !== "text") {
+    const rows = prompt.sections?.flatMap((section) => section.rows) ?? [];
+    const isPeoplePicker = rows.some((row) => row.id.startsWith("emergency:people:"));
     const fallback = prompt.kind === "buttons"
-      ? `${prompt.body}\n\nReply YES to submit your request or NO to cancel.`
-      : `${prompt.body}\n\n${prompt.sections?.flatMap((section) => section.rows.map((row, index) => `${index + 1}. ${row.title}${row.description ? ` — ${row.description}` : ""}`)).join("\n") ?? ""}\n\nReply with a number.`;
+      ? `${prompt.body}\n\n${prompt.buttons?.map((button, index) => `${index + 1}. ${button.title}`).join("\n") ?? ""}\n\nReply with a number.`
+      : isPeoplePicker
+        ? `${prompt.body}\n\nReply with the exact number of people affected.`
+        : `${prompt.body}\n\n${rows.map((row, index) => `${index + 1}. ${row.title}${row.description ? ` — ${row.description}` : ""}`).join("\n")}\n\nReply with a number.`;
     await sendMessageToConversation(db, accountId, { conversationId, messageType: "text", contentText: fallback, senderType: "bot" });
     return;
   }
@@ -76,7 +90,7 @@ function normalizeOpenWaInput(
 ): ChannelInboundMessage {
   const value = input.text?.trim().toLowerCase();
   if (!value || input.interactionId) return input;
-  if (!state || state === "start") {
+  if (!state || state === "start" || state === "edit_service") {
     const choice: Record<string, string> = {
       "1": "emergency:service:rescue",
       "2": "emergency:service:food_water",
@@ -89,8 +103,22 @@ function normalizeOpenWaInput(
     if (choice[value]) return { ...input, interactionId: choice[value] };
   }
   if (state === "confirm_request") {
+    if (value === "1") return { ...input, interactionId: "emergency:confirm" };
+    if (value === "2") return { ...input, interactionId: "emergency:edit" };
+    if (value === "3") return { ...input, interactionId: "emergency:cancel" };
     if (["yes", "y", "submit", "confirm"].includes(value)) return { ...input, interactionId: "emergency:confirm" };
     if (["no", "n", "cancel"].includes(value)) return { ...input, interactionId: "emergency:cancel" };
+  }
+  if (state === "edit_menu") {
+    const choices: Record<string, string> = {
+      "1": "emergency:edit:service", "2": "emergency:edit:location", "3": "emergency:edit:people",
+      "4": "emergency:edit:details", "5": "emergency:cancel",
+    };
+    if (choices[value]) return { ...input, interactionId: choices[value] };
+  }
+  if (state === "restart_choice") {
+    const choices: Record<string, string> = { "1": "emergency:restart", "2": "emergency:continue", "3": "emergency:cancel" };
+    if (choices[value]) return { ...input, interactionId: choices[value] };
   }
   return input;
 }
@@ -161,15 +189,20 @@ export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInb
   const channelInput = transport === "openwa"
     ? normalizeOpenWaInput(session?.state ?? null, input.input)
     : input.input;
-  if (!session && !isExplicitEmergencyStart(channelInput)) return { consumed: false };
+  const beginsEmergencyIntake = isExplicitEmergencyStart(channelInput) || hasDeterministicEmergencyIntent(channelInput.text);
+  if (!session && !beginsEmergencyIntake) return { consumed: false };
   session ??= await createSession(input.db, input.accountId, input.contactId, input.conversationId);
   if (session.last_inbound_message_id === input.inboundMessageId) return { consumed: true };
+  const sessionData = session.collected_data ?? {};
+  const dataWithKnownName = !isUsableCitizenName(sessionData.requesterName) && isUsableCitizenName(input.knownRequesterName)
+    ? { ...sessionData, requesterName: input.knownRequesterName!.trim() }
+    : sessionData;
   const activeSession = session.state !== "start" && session.state !== "waiting_for_coordinator";
-  if (!activeSession && !isExplicitEmergencyStart(channelInput)) return { consumed: false };
+  if (!activeSession && !beginsEmergencyIntake) return { consumed: false };
   const locationText = channelInput.location
     ? channelInput.location.name ?? channelInput.location.address ?? `${channelInput.location.latitude.toFixed(5)}, ${channelInput.location.longitude.toFixed(5)}`
     : channelInput.text;
-  const transition = transitionIntake(session.state, session.collected_data ?? {}, {
+  const transition = transitionIntake(session.state, dataWithKnownName, {
     text: locationText,
     interactionId: channelInput.interactionId,
     latitude: channelInput.location?.latitude,

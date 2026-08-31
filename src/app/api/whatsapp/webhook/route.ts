@@ -778,6 +778,7 @@ async function processMessage(
       contactId: contactRecord.id,
       conversationId: conversation.id,
       inboundMessageId: message.id,
+      knownRequesterName: contactRecord.name ?? null,
       input: {
         text: contentText ?? message.text?.body ?? null,
         interactionId: interactiveReplyId,

@@ -210,6 +210,7 @@ export async function persistOpenWaInboundMessage(input: {
       contactId: contactOutcome.contact.id,
       conversationId: conversation.id,
       inboundMessageId: input.messageId,
+      knownRequesterName: contactOutcome.contact.name ?? null,
       transport: 'openwa',
       input: {
         // A caption is evidence metadata, not a reliable answer to the

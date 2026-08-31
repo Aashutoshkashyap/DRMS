@@ -159,6 +159,17 @@ If the intended work is instead a migration to a different stack, database, host
 - Add case-scoped `incident_notes`, resource/vehicle recommendations from coordinator-maintained availability and stored coordinates, coordinator-confirmed assignment inputs, and Follow-up Required for unassigned cases, failed deliveries, and only explicit age rules.
 - Document the strict `DEMO DATA -> normalized DRMS entities` boundary and the future official-data adapter boundary in `docs/demo-data.md`; no official-source integration is implemented.
 
+### Phase 7 — Streamlined deterministic citizen intake
+
+**Status:** Implemented locally; no database migration required.
+
+- Retain the existing signed, idempotent Meta/OpenWA webhook path, session records, CRM conversations, Request ID generation, status lookup, and human-coordinator handoff.
+- Replace the fixed name/location/people/details sequence with progressive collection: deterministic service aliases, explicit people-count patterns, fixed Nepal locality aliases, coordinates, and incoming WhatsApp location pins fill only missing fields.
+- Reuse a valid name already attached to the same contact/conversation; a phone-looking placeholder is never treated as a citizen name. New citizens are asked only for the missing name.
+- Use concise Meta lists/buttons and OpenWA numeric fallbacks. Before creation, present a concise request summary with Confirm, Edit, and Cancel; edit changes one selected field and returns to that summary.
+- Keep rescue, medical, and missing-person detail prompts where operationally required. Food/water, shelter, and information receive an explicit deterministic default description when the citizen supplied no additional detail.
+- Preserve numeric OpenWA service selection, Meta interactive replies, map-pin coordinates, duplicate-message protection, and the no-AI runtime guarantee. No SMS code or transport behavior is changed.
+
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |
 | `npm run lint` | Passed | 0 errors; 35 inherited warnings remain outside this milestone. |
@@ -166,3 +177,4 @@ If the intended work is instead a migration to a different stack, database, host
 | `npm test` | Passed | 87 files / 851 tests, including Meta/OpenWA intake and new demo/follow-up unit coverage. |
 | `npm run build` | Environment-blocked | Next.js 16 reached “Creating an optimized production build”, then could not complete in this workspace because `next/font/google` must fetch Inter and outbound DNS/network access is restricted. No source build error was reported. |
 | OpenWA pin/photo follow-up | Passed locally | 90 test files / 859 tests; map pins reach incident coordinates, image base64 is stored in the existing `chat-media` bucket, and the full typecheck/lint pass with the pre-existing 35 warnings. A production build was retried but remained blocked at Next’s external font-fetch step in this workspace. |
+| Phase 7 | Passed locally | `npm run typecheck`, 90 test files / 866 tests, and lint (0 errors; 35 inherited warnings) pass. Coverage includes a prior multi-message journey, multi-field food request, partial input, known citizen reuse, location pin, edit, invalid field, restart/continue, duplicate confirmation, and existing Meta/OpenWA paths. |

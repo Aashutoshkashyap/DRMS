@@ -124,6 +124,29 @@ describe("WhatsApp emergency adapter", () => {
     );
   });
 
+  it("reuses a known citizen name and confirms a multi-field OpenWA request", async () => {
+    const db = sessionDb();
+    const base = {
+      db,
+      accountId: "account-1",
+      userId: "owner-1",
+      contactId: "contact-1",
+      conversationId: "conversation-1",
+      knownRequesterName: "Sita Rai",
+      transport: "openwa" as const,
+    };
+
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m1", input: { text: "START" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m2", input: { text: "Need food for 5 people at Kalanki" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m3", input: { text: "1" } });
+
+    const sent = mocks.sendMessageToConversation.mock.calls as unknown as Array<[unknown, unknown, { contentText?: unknown }]>;
+    expect(sent.some(([, , payload]) => String(payload.contentText).includes("What is your name"))).toBe(false);
+    expect(mocks.createIncidentRequest).toHaveBeenCalledWith(db, expect.objectContaining({
+      requesterName: "Sita Rai", category: "food_water", location: "Kalanki", peopleAffected: 5,
+    }));
+  });
+
   it("keeps non-emergency WhatsApp conversations on the existing path", async () => {
     const result = await handleWhatsAppEmergencyInbound({ db: sessionDb(), accountId: "account-1", userId: "owner-1", contactId: "contact-1", conversationId: "conversation-1", inboundMessageId: "ordinary", input: { text: "Hello there" } });
     expect(result).toEqual({ consumed: false });
