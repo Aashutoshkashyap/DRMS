@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 import {
-  phoneFromOpenWaChatId,
+  resolveOpenWaSenderPhone,
   type OpenWaWebhookEvent,
   verifyOpenWaWebhookSignature,
 } from '@/lib/whatsapp/openwa';
@@ -27,6 +27,12 @@ function eventTimestamp(event: OpenWaWebhookEvent): string {
   return Number.isNaN(parsed) ? new Date().toISOString() : new Date(parsed).toISOString();
 }
 
+function legacyLidPhone(chatId: string | undefined): string | null {
+  if (!chatId?.endsWith('@lid')) return null;
+  const digits = chatId.split('@', 1)[0]?.replace(/\D/g, '');
+  return digits ? `+${digits}` : null;
+}
+
 export async function POST(request: Request) {
   const rawBody = await request.text();
   if (!verifyOpenWaWebhookSignature(rawBody, request.headers.get('x-openwa-signature'))) {
@@ -47,7 +53,17 @@ export async function POST(request: Request) {
   if (event.data.fromMe || event.data.isGroup) return NextResponse.json({ ok: true, ignored: 'non-citizen-message' });
 
   const messageId = event.data.id;
-  const senderPhone = phoneFromOpenWaChatId(event.data.from ?? event.data.chatId);
+  const senderChatId = event.data.from ?? event.data.chatId;
+  let senderPhone: string | null = null;
+  try {
+    senderPhone = await resolveOpenWaSenderPhone({
+      sessionId: event.sessionId,
+      chatId: senderChatId,
+      senderPhone: event.data.senderPhone,
+    });
+  } catch (error) {
+    console.error('[openwa] sender phone resolution failed:', error);
+  }
   if (!messageId || !senderPhone) return NextResponse.json({ error: 'Inbound message lacks sender or id' }, { status: 400 });
 
   const db = supabaseAdmin();
@@ -75,6 +91,7 @@ export async function POST(request: Request) {
       ownerUserId: config.user_id,
       messageId,
       senderPhone,
+      legacyLidPhone: legacyLidPhone(senderChatId),
       contentText: event.data.body ?? '',
       occurredAt: eventTimestamp(event),
     });

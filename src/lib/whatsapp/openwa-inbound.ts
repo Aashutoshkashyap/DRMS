@@ -15,6 +15,7 @@ async function findOrCreateContact(
   ownerUserId: string,
   phone: string,
   name: string,
+  legacyLidPhone?: string | null,
 ) {
   const existing = await findExistingContact(db, accountId, phone);
   if (existing) {
@@ -22,6 +23,28 @@ async function findOrCreateContact(
       await db.from('contacts').update({ name, updated_at: new Date().toISOString() }).eq('id', existing.id);
     }
     return { contact: existing, wasCreated: false };
+  }
+
+  // Earlier OpenWA intake mistakenly stored the digits of an `@lid` privacy
+  // id as a phone number. When the gateway later resolves that same sender,
+  // repair the original contact in place so its conversations and incident
+  // history remain attached to the now-callable number.
+  if (legacyLidPhone) {
+    const legacy = await findExistingContact(db, accountId, legacyLidPhone);
+    if (legacy) {
+      const { data: repaired, error: repairError } = await db
+        .from('contacts')
+        .update({ phone, name: name || legacy.name || phone, updated_at: new Date().toISOString() })
+        .eq('id', legacy.id)
+        .select()
+        .single();
+      if (!repairError && repaired) return { contact: repaired, wasCreated: false };
+      if (isUniqueViolation(repairError)) {
+        const raced = await findExistingContact(db, accountId, phone);
+        if (raced) return { contact: raced, wasCreated: false };
+      }
+      throw new Error(`Could not repair OpenWA LID contact: ${repairError?.message ?? 'unknown error'}`);
+    }
   }
 
   const { data, error } = await db
@@ -83,6 +106,8 @@ export async function persistOpenWaInboundMessage(input: {
   ownerUserId: string;
   messageId: string;
   senderPhone: string;
+  /** The prior incorrect number produced by a legacy `@lid` conversion. */
+  legacyLidPhone?: string | null;
   senderName?: string | null;
   contentText: string;
   occurredAt: string;
@@ -93,6 +118,7 @@ export async function persistOpenWaInboundMessage(input: {
     input.ownerUserId,
     input.senderPhone,
     input.senderName?.trim() || input.senderPhone,
+    input.legacyLidPhone,
   );
   const conversationOutcome = await findOrCreateConversation(
     input.db,

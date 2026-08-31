@@ -20,6 +20,12 @@ export type OpenWaWebhookEvent = {
     from?: string;
     to?: string;
     chatId?: string;
+    /**
+     * Best-effort E.164/MSISDN supplied by OpenWA when it resolves a
+     * WhatsApp privacy identifier (`@lid`). It can be absent when the
+     * provider cannot establish a trustworthy phone mapping.
+     */
+    senderPhone?: string | null;
     body?: string;
     type?: string;
     timestamp?: number;
@@ -185,6 +191,49 @@ export function verifyOpenWaWebhookSignature(rawBody: string, signature: string 
 
 export function phoneFromOpenWaChatId(chatId: string | undefined): string | null {
   if (!chatId) return null;
-  const digits = chatId.split('@')[0]?.replace(/\D/g, '');
-  return digits ? `+${digits}` : null;
+  const [rawId, domain] = chatId.trim().split('@', 2);
+  // `@lid` is a WhatsApp privacy identifier, not a phone number. Never
+  // coerce its digits into a contact phone: that creates a believable but
+  // non-callable number in a disaster coordination record.
+  if (domain !== 'c.us' && domain !== 's.whatsapp.net') return null;
+  const digits = rawId?.replace(/\D/g, '');
+  return digits && isValidE164(digits) ? `+${digits}` : null;
+}
+
+function normalizedOpenWaPhone(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const digits = sanitizePhoneForMeta(value);
+  return isValidE164(digits) ? `+${digits}` : null;
+}
+
+/**
+ * Resolve an inbound OpenWA identity to a callable E.164 phone number.
+ *
+ * OpenWA can emit `@lid` when WhatsApp withholds the normal phone identity.
+ * The gateway's contact-phone endpoint performs its supported, best-effort
+ * resolution. A null result means the number is genuinely unavailable; the
+ * caller must not manufacture one from the LID digits.
+ */
+export async function resolveOpenWaSenderPhone(input: {
+  sessionId: string;
+  chatId?: string;
+  senderPhone?: string | null;
+}): Promise<string | null> {
+  const fromPayload = normalizedOpenWaPhone(input.senderPhone);
+  if (fromPayload) return fromPayload;
+
+  const direct = phoneFromOpenWaChatId(input.chatId);
+  if (direct) return direct;
+
+  const chatId = input.chatId?.trim();
+  if (!chatId?.endsWith('@lid')) return null;
+
+  const response = await fetch(
+    openWaApiUrl(`/sessions/${encodeURIComponent(input.sessionId)}/contacts/${encodeURIComponent(chatId)}/phone`),
+    { headers: gatewayHeaders(), cache: 'no-store' },
+  );
+  const payload = await parseGatewayResponse(response);
+  return payload && typeof payload === 'object' && 'phone' in payload
+    ? normalizedOpenWaPhone(payload.phone)
+    : null;
 }

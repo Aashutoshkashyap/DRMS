@@ -6,6 +6,7 @@ import {
   ensureOpenWaInboundWebhook,
   openWaPhoneMatchesConfiguredNumber,
   phoneFromOpenWaChatId,
+  resolveOpenWaSenderPhone,
   verifyOpenWaWebhookSignature,
 } from './openwa';
 
@@ -26,6 +27,26 @@ describe('OpenWA transport helpers', () => {
     expect(verifyOpenWaWebhookSignature(raw, signature)).toBe(true);
     expect(verifyOpenWaWebhookSignature(raw, 'sha256=bad')).toBe(false);
     expect(phoneFromOpenWaChatId('15551234567@c.us')).toBe('+15551234567');
+    expect(phoneFromOpenWaChatId('154760640467018@lid')).toBeNull();
+  });
+
+  it('resolves a WhatsApp LID through the gateway instead of treating it as a phone', async () => {
+    vi.stubEnv('OPENWA_BASE_URL', 'https://gateway.example');
+    vi.stubEnv('OPENWA_API_KEY', 'gateway-key');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      contactId: '154760640467018@lid',
+      phone: '9779812345678',
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(resolveOpenWaSenderPhone({
+      sessionId: 'session-1',
+      chatId: '154760640467018@lid',
+    })).resolves.toBe('+9779812345678');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://gateway.example/api/sessions/session-1/contacts/154760640467018%40lid/phone',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
   });
 
   it('requires the server-configured WhatsApp number to match the gateway session', () => {
