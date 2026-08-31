@@ -7,7 +7,11 @@ import {
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
-import { getOpenWaSession, openWaPhoneMatchesConfiguredNumber } from '@/lib/whatsapp/openwa'
+import {
+  ensureOpenWaInboundWebhook,
+  getOpenWaSession,
+  openWaPhoneMatchesConfiguredNumber,
+} from '@/lib/whatsapp/openwa'
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here
@@ -237,6 +241,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'OpenWA session phone does not match WHATSAPP_PHONE_NUMBER.' }, { status: 400 })
       }
 
+      let webhook
+      try {
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+        if (!siteUrl) throw new Error('NEXT_PUBLIC_SITE_URL is not configured')
+        const webhookUrl = new URL('/api/whatsapp/openwa/webhook', siteUrl).toString()
+        webhook = await ensureOpenWaInboundWebhook({ sessionId, webhookUrl })
+      } catch (err) {
+        console.error('Error registering OpenWA webhook:', err)
+        return NextResponse.json({
+          error: err instanceof Error ? `Could not register OpenWA webhook: ${err.message}` : 'Could not register OpenWA webhook',
+        }, { status: 400 })
+      }
+
       const { data: existing } = await supabase
         .from('whatsapp_config')
         .select('id')
@@ -263,7 +280,7 @@ export async function POST(request: Request) {
         console.error('Error saving OpenWA configuration:', result.error)
         return NextResponse.json({ error: 'Failed to save OpenWA configuration' }, { status: 500 })
       }
-      return NextResponse.json({ success: true, saved: true, registered: true, transport: 'openwa', session })
+      return NextResponse.json({ success: true, saved: true, registered: true, transport: 'openwa', session, webhook })
     }
 
     if (!access_token || !phone_number_id) {

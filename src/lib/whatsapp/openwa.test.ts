@@ -3,6 +3,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
   openWaApiUrl,
   openWaChatId,
+  ensureOpenWaInboundWebhook,
   openWaPhoneMatchesConfiguredNumber,
   phoneFromOpenWaChatId,
   verifyOpenWaWebhookSignature,
@@ -32,5 +33,30 @@ describe('OpenWA transport helpers', () => {
     vi.stubEnv('WHATSAPP_PHONE_NUMBER', '+15551234567');
     expect(openWaPhoneMatchesConfiguredNumber('+1 555 123 4567')).toBe(true);
     expect(openWaPhoneMatchesConfiguredNumber('+15557654321')).toBe(false);
+  });
+
+  it('creates the signed inbound webhook when the session has none', async () => {
+    vi.stubEnv('OPENWA_BASE_URL', 'https://gateway.example');
+    vi.stubEnv('OPENWA_API_KEY', 'gateway-key');
+    vi.stubEnv('OPENWA_WEBHOOK_SECRET', 'webhook-secret');
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('[]', { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'webhook-1' }), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(ensureOpenWaInboundWebhook({
+      sessionId: 'session-1',
+      webhookUrl: 'https://drms.example/api/whatsapp/openwa/webhook',
+    })).resolves.toEqual({ id: 'webhook-1', created: true });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(2,
+      'https://gateway.example/api/sessions/session-1/webhooks',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({
+      url: 'https://drms.example/api/whatsapp/openwa/webhook',
+      events: ['message.received'],
+      secret: 'webhook-secret',
+    });
   });
 });

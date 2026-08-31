@@ -28,6 +28,12 @@ export type OpenWaWebhookEvent = {
   };
 };
 
+type OpenWaWebhook = {
+  id: string;
+  url: string;
+  events?: string[];
+};
+
 function requiredEnv(name: 'OPENWA_BASE_URL' | 'OPENWA_API_KEY'): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is not configured`);
@@ -46,6 +52,12 @@ function gatewayHeaders(): HeadersInit {
     'Content-Type': 'application/json',
     'X-API-Key': requiredEnv('OPENWA_API_KEY'),
   };
+}
+
+function requiredWebhookSecret(): string {
+  const secret = process.env.OPENWA_WEBHOOK_SECRET?.trim();
+  if (!secret) throw new Error('OPENWA_WEBHOOK_SECRET is not configured');
+  return secret;
 }
 
 async function parseGatewayResponse(response: Response): Promise<unknown> {
@@ -99,6 +111,52 @@ export async function sendOpenWaText(input: {
     throw new Error('OpenWA returned no message id');
   }
   return { messageId: String(payload.messageId) };
+}
+
+/**
+ * Create or repair the single DRMS inbound webhook for an OpenWA session.
+ * The signing secret never leaves the server: it is read from Vercel's
+ * runtime environment and sent directly to the configured gateway.
+ */
+export async function ensureOpenWaInboundWebhook(input: {
+  sessionId: string;
+  webhookUrl: string;
+}): Promise<{ id: string; created: boolean }> {
+  const sessionPath = `/sessions/${encodeURIComponent(input.sessionId)}/webhooks`;
+  const listResponse = await fetch(openWaApiUrl(sessionPath), {
+    headers: gatewayHeaders(),
+    cache: 'no-store',
+  });
+  const listed = await parseGatewayResponse(listResponse);
+  const existing = Array.isArray(listed)
+    ? listed.find((webhook): webhook is OpenWaWebhook => (
+      !!webhook
+      && typeof webhook === 'object'
+      && 'id' in webhook
+      && 'url' in webhook
+      && String(webhook.url) === input.webhookUrl
+    ))
+    : undefined;
+
+  const body = JSON.stringify({
+    url: input.webhookUrl,
+    events: ['message.received'],
+    secret: requiredWebhookSecret(),
+  });
+  const response = await fetch(
+    openWaApiUrl(existing ? `${sessionPath}/${encodeURIComponent(String(existing.id))}` : sessionPath),
+    {
+      method: existing ? 'PUT' : 'POST',
+      headers: gatewayHeaders(),
+      body,
+      cache: 'no-store',
+    },
+  );
+  const payload = await parseGatewayResponse(response);
+  if (!payload || typeof payload !== 'object' || !('id' in payload) || !payload.id) {
+    throw new Error('OpenWA returned an invalid webhook response');
+  }
+  return { id: String(payload.id), created: !existing };
 }
 
 export function openWaPhoneMatchesConfiguredNumber(phone: string | null): boolean {
