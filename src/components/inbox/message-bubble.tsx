@@ -24,6 +24,7 @@ import {
 } from "./message-media";
 import { InteractivePreview } from "@/components/interactive/interactive-preview";
 import { useTranslations } from "next-intl";
+import { mapUrlFromLocationText } from "@/lib/location/map-url";
 
 interface MessageBubbleProps {
   message: Message;
@@ -165,13 +166,27 @@ function MessageContent({
         </div>
       );
 
-    case "location":
+    case "location": {
+      const mapUrl = mapUrlFromLocationText(message.content_text);
       return (
         <div className="flex items-center gap-2 text-sm">
           <MapPin className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span>{message.content_text || t("locationShared")}</span>
+          <div className="min-w-0">
+            <span className="break-words">{message.content_text || t("locationShared")}</span>
+            {mapUrl && (
+              <a
+                className="mt-0.5 block text-xs underline underline-offset-2"
+                href={mapUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open map
+              </a>
+            )}
+          </div>
         </div>
       );
+    }
 
     case "interactive": {
       // Three cases share content_type='interactive':

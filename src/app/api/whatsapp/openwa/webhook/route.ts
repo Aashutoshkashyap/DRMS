@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import {
   resolveOpenWaSenderPhone,
+  parseOpenWaInboundPayload,
   type OpenWaWebhookEvent,
   verifyOpenWaWebhookSignature,
 } from '@/lib/whatsapp/openwa';
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
   }
 
   try {
+    const inbound = parseOpenWaInboundPayload(event);
     const result = await persistOpenWaInboundMessage({
       db,
       accountId: config.account_id,
@@ -92,7 +94,10 @@ export async function POST(request: Request) {
       messageId,
       senderPhone,
       legacyLidPhone: legacyLidPhone(senderChatId),
-      contentText: event.data.body ?? '',
+      contentType: inbound.contentType,
+      contentText: inbound.contentText,
+      location: inbound.location,
+      image: inbound.image,
       occurredAt: eventTimestamp(event),
     });
     return NextResponse.json({ ok: true, duplicate: result.duplicate });

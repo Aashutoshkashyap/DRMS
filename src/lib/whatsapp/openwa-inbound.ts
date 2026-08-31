@@ -6,8 +6,14 @@ import { reopenClosedConversation } from '@/lib/conversations/reopen';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 import { handleWhatsAppEmergencyInbound } from '@/lib/whatsapp/emergency-interface';
+import {
+  decodeOpenWaInboundImage,
+  storeOpenWaInboundImage,
+  type OpenWaInboundImage,
+} from '@/lib/whatsapp/openwa-inbound-media';
 
 type InboundResult = { duplicate: boolean; conversationId: string; contactId: string };
+type OpenWaInboundContentType = 'text' | 'image' | 'location';
 
 async function findOrCreateContact(
   db: SupabaseClient,
@@ -109,7 +115,10 @@ export async function persistOpenWaInboundMessage(input: {
   /** The prior incorrect number produced by a legacy `@lid` conversion. */
   legacyLidPhone?: string | null;
   senderName?: string | null;
+  contentType: OpenWaInboundContentType;
   contentText: string;
+  location?: { latitude: number; longitude: number; name?: string; address?: string } | null;
+  image?: { body: string; mimeType: string | null; caption: string | null } | null;
   occurredAt: string;
 }): Promise<InboundResult> {
   const contactOutcome = await findOrCreateContact(
@@ -128,6 +137,30 @@ export async function persistOpenWaInboundMessage(input: {
   );
   const conversation = conversationOutcome.conversation;
 
+  // The gateway provides image bytes as base64. Store those bytes in the
+  // same durable, account-scoped `chat-media` bucket the CRM already uses.
+  // Crucially, never let the base64 string reach content_text: it is neither
+  // useful to a coordinator nor a valid disaster-intake answer.
+  let mediaUrl: string | null = null;
+  let mediaType: string | null = null;
+  let decodedImage: OpenWaInboundImage | null = null;
+  if (input.contentType === 'image' && input.image) {
+    decodedImage = decodeOpenWaInboundImage(input.image);
+    if (decodedImage) {
+      mediaType = decodedImage.mimeType;
+      mediaUrl = await storeOpenWaInboundImage({
+        storage: input.db.storage,
+        accountId: input.accountId,
+        messageId: input.messageId,
+        image: decodedImage,
+      });
+    }
+  }
+  const persistedText = input.contentType === 'image'
+    ? (decodedImage?.caption ?? (input.contentText.trim() || null))
+    : (input.contentText.trim() || null);
+  const previewText = persistedText || `[${input.contentType}]`;
+
   const { count: priorCustomerMessages } = await input.db
     .from('messages')
     .select('id', { count: 'exact', head: true })
@@ -140,8 +173,10 @@ export async function persistOpenWaInboundMessage(input: {
       {
         conversation_id: conversation.id,
         sender_type: 'customer',
-        content_type: 'text',
-        content_text: input.contentText,
+        content_type: input.contentType,
+        content_text: persistedText,
+        media_url: mediaUrl,
+        media_type: mediaType,
         message_id: input.messageId,
         status: 'delivered',
         created_at: input.occurredAt,
@@ -161,7 +196,7 @@ export async function persistOpenWaInboundMessage(input: {
 
   const { error: bumpError } = await input.db.rpc('bump_conversation_on_inbound', {
     p_conversation_id: conversation.id,
-    p_last_message_text: input.contentText || '[text]',
+    p_last_message_text: previewText,
   });
   if (bumpError) throw new Error(`Could not update conversation: ${bumpError.message}`);
   await reopenClosedConversation(input.db, conversation);
@@ -176,7 +211,13 @@ export async function persistOpenWaInboundMessage(input: {
       conversationId: conversation.id,
       inboundMessageId: input.messageId,
       transport: 'openwa',
-      input: { text: input.contentText },
+      input: {
+        // A caption is evidence metadata, not a reliable answer to the
+        // deterministic intake question. Map pins are the sole non-text
+        // answer accepted by the state machine.
+        text: input.contentType === 'text' ? input.contentText : null,
+        location: input.location ?? null,
+      },
     })).consumed;
   } catch (error) {
     console.error('[openwa] emergency intake failed after inbound persistence:', error);
@@ -189,7 +230,7 @@ export async function persistOpenWaInboundMessage(input: {
         userId: input.ownerUserId,
         contactId: contactOutcome.contact.id,
         conversationId: conversation.id,
-        message: { kind: 'text', text: input.contentText, meta_message_id: input.messageId },
+        message: { kind: 'text', text: persistedText ?? '', meta_message_id: input.messageId },
         isFirstInboundMessage: (priorCustomerMessages ?? 0) === 0,
       });
 
@@ -202,7 +243,7 @@ export async function persistOpenWaInboundMessage(input: {
       accountId: input.accountId,
       triggerType,
       contactId: contactOutcome.contact.id,
-      context: { message_text: input.contentText, conversation_id: conversation.id },
+      context: { message_text: persistedText ?? '', conversation_id: conversation.id },
     }).catch((error) => console.error('[openwa] automation dispatch failed:', error));
   }
 
@@ -210,8 +251,8 @@ export async function persistOpenWaInboundMessage(input: {
     conversation_id: conversation.id,
     contact_id: contactOutcome.contact.id,
     whatsapp_message_id: input.messageId,
-    content_type: 'text',
-    text: input.contentText,
+    content_type: input.contentType,
+    text: persistedText,
   });
   return { duplicate: false, conversationId: conversation.id, contactId: contactOutcome.contact.id };
 }

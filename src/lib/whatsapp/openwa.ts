@@ -28,11 +28,100 @@ export type OpenWaWebhookEvent = {
     senderPhone?: string | null;
     body?: string;
     type?: string;
+    /** OpenWA's native location shape. Gateway versions may alternatively
+     * expose these same fields directly on `data`, so the parser below
+     * accepts both forms. */
+    location?: {
+      latitude?: number | string;
+      longitude?: number | string;
+      lat?: number | string;
+      lng?: number | string;
+      name?: string;
+      loc?: string;
+      address?: string;
+    };
+    lat?: number | string;
+    lng?: number | string;
+    latitude?: number | string;
+    longitude?: number | string;
+    loc?: string;
+    address?: string;
+    caption?: string;
+    mimeType?: string;
+    mimetype?: string;
+    mediaType?: string;
     timestamp?: number;
     fromMe?: boolean;
     isGroup?: boolean;
   };
 };
+
+export type OpenWaInboundPayload =
+  | {
+      contentType: "text";
+      contentText: string;
+      location: null;
+      image: null;
+    }
+  | {
+      contentType: "location";
+      contentText: string;
+      location: { latitude: number; longitude: number; name?: string; address?: string };
+      image: null;
+    }
+  | {
+      contentType: "image";
+      contentText: string;
+      location: null;
+      image: { body: string; mimeType: string | null; caption: string | null };
+    };
+
+function finiteNumber(value: unknown): number | null {
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(number) ? number : null;
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+/**
+ * Normalize the two OpenWA payload variants we need for disaster intake.
+ * Native OpenWA exposes location as `lat`/`lng`/`loc`; our gateway wrapper
+ * may nest those fields below `location`. Images carry base64 in `body`.
+ */
+export function parseOpenWaInboundPayload(event: OpenWaWebhookEvent): OpenWaInboundPayload {
+  const data = event.data;
+  const type = data.type?.trim().toLowerCase();
+  const location = data.location;
+  const latitude = finiteNumber(location?.latitude ?? location?.lat ?? data.latitude ?? data.lat);
+  const longitude = finiteNumber(location?.longitude ?? location?.lng ?? data.longitude ?? data.lng);
+  if (type === "location" && latitude !== null && longitude !== null) {
+    const name = firstString(location?.name, location?.loc, data.loc);
+    const address = firstString(location?.address, data.address);
+    return {
+      contentType: "location",
+      contentText: [name, address, `${latitude},${longitude}`].filter(Boolean).join(" - "),
+      location: { latitude, longitude, ...(name ? { name } : {}), ...(address ? { address } : {}) },
+      image: null,
+    };
+  }
+
+  const mimeType = firstString(data.mimeType, data.mimetype, data.mediaType);
+  if ((type === "image" || mimeType?.toLowerCase().startsWith("image/")) && data.body) {
+    return {
+      contentType: "image",
+      contentText: firstString(data.caption) ?? "",
+      location: null,
+      image: { body: data.body, mimeType, caption: firstString(data.caption) },
+    };
+  }
+
+  return { contentType: "text", contentText: data.body ?? "", location: null, image: null };
+}
 
 type OpenWaWebhook = {
   id: string;

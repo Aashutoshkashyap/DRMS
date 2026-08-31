@@ -128,6 +128,7 @@ If the intended work is instead a migration to a different stack, database, host
 - Use signed, idempotent `message.received` webhooks at `/api/whatsapp/openwa/webhook`; process plain text only and never invoke the optional AI reply system for OpenWA inbound traffic.
 - Keep OpenWA API credentials and webhook HMAC secret in server-side deployment configuration. Store only the non-secret gateway session id in the existing `whatsapp_config` row.
 - Run OpenWA separately from Vercel on a persistent host. Its session state is transport infrastructure; Supabase remains the single source of operational truth.
+- Accept inbound OpenWA map pins during emergency intake, preserve their coordinates on the resulting incident, and render their CRM message with an openable map link. Persist OpenWA evidence photos in the existing account-scoped `chat-media` bucket; never place provider base64 image data in form fields or message text. No new table or migration is required.
 
 ### Phase 4B — Vercel scheduling
 
@@ -164,3 +165,4 @@ If the intended work is instead a migration to a different stack, database, host
 | `npm run typecheck` | Passed | TypeScript compilation clean. |
 | `npm test` | Passed | 87 files / 851 tests, including Meta/OpenWA intake and new demo/follow-up unit coverage. |
 | `npm run build` | Environment-blocked | Next.js 16 reached “Creating an optimized production build”, then could not complete in this workspace because `next/font/google` must fetch Inter and outbound DNS/network access is restricted. No source build error was reported. |
+| OpenWA pin/photo follow-up | Passed locally | 90 test files / 859 tests; map pins reach incident coordinates, image base64 is stored in the existing `chat-media` bucket, and the full typecheck/lint pass with the pre-existing 35 warnings. A production build was retried but remained blocked at Next’s external font-fetch step in this workspace. |

@@ -91,6 +91,39 @@ describe("WhatsApp emergency adapter", () => {
     );
   });
 
+  it("uses a WhatsApp map pin as the incident location and preserves its coordinates", async () => {
+    const db = sessionDb();
+    const base = {
+      db,
+      accountId: "account-1",
+      userId: "owner-1",
+      contactId: "contact-1",
+      conversationId: "conversation-1",
+      transport: "openwa" as const,
+    };
+
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m1", input: { text: "START" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m2", input: { text: "1" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m3", input: { text: "Sita Rai" } });
+    await handleWhatsAppEmergencyInbound({
+      ...base,
+      inboundMessageId: "m4",
+      input: { location: { latitude: 27.7172, longitude: 85.324, name: "Kathmandu Durbar Square" } },
+    });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m5", input: { text: "3" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m6", input: { text: "Trapped after landslide" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m7", input: { text: "YES" } });
+
+    expect(mocks.createIncidentRequest).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        location: "Kathmandu Durbar Square",
+        latitude: 27.7172,
+        longitude: 85.324,
+      }),
+    );
+  });
+
   it("keeps non-emergency WhatsApp conversations on the existing path", async () => {
     const result = await handleWhatsAppEmergencyInbound({ db: sessionDb(), accountId: "account-1", userId: "owner-1", contactId: "contact-1", conversationId: "conversation-1", inboundMessageId: "ordinary", input: { text: "Hello there" } });
     expect(result).toEqual({ consumed: false });
