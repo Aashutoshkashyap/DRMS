@@ -94,6 +94,15 @@ If the intended work is instead a migration to a different stack, database, host
 
 ## Disaster coordination delivery
 
+### Phase 13C — Shared-workspace access repair
+
+**Status:** In progress.
+
+- Production audit confirmed that the reported empty dashboard belonged to a separate, newly-created personal account. Existing operational account-scoped RLS policies correctly prevented it from seeing another workspace.
+- The underlying defect is invite onboarding: opening the dashboard creates only the stock `Disaster Response Coordination` pipeline, but the invitation redemption function previously treated that harmless scaffold as user data and refused the join.
+- Migration `054_allow_bootstrap_workspace_join.sql` permits cleanup only for that exact six-stage stock scaffold, while conservatively rejecting any contacts, conversations, incidents, settings, integrations, resources, activity, evidence, or other saved account data. Follow-up migration `055_fix_bootstrap_workspace_validator.sql` corrects the validator alias without changing account data or RLS.
+- The dashboard now distinguishes an unjoined private workspace from a shared operational workspace and does not present all-zero incident counters as a successful shared board.
+
 ### Phase 2 — Disaster Coordination Core
 
 **Status:** Implemented; final validation recorded below.
