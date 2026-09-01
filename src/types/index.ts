@@ -176,6 +176,19 @@ export interface IncidentFollowUpSettings {
   updated_at: string;
 }
 
+/** Append-only coordinator/system activity for one incident. */
+export interface IncidentActivity {
+  id: string;
+  account_id: string;
+  deal_id: string;
+  actor_user_id: string | null;
+  action: "incident_created" | "status_changed" | "assignment_confirmed" | "notification_queued" | "notification_sent" | "notification_failed" | "notification_retry_requested" | "case_note_added" | "follow_up_created" | "follow_up_reviewed" | "follow_up_cleared";
+  previous_value: string | null;
+  next_value: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {
@@ -436,6 +449,8 @@ export interface Deal {
   category: IncidentCategory;
   requester_name?: string | null;
   location?: string | null;
+  municipality?: string | null;
+  district?: string | null;
   landmark?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -445,6 +460,10 @@ export interface Deal {
   description?: string | null;
   assigned_team?: string | null;
   assigned_resource?: string | null;
+  assigned_team_id?: string | null;
+  assigned_vehicle_id?: string | null;
+  assigned_location_id?: string | null;
+  assigned_inventory_id?: string | null;
   resolved_at?: string | null;
 }
 

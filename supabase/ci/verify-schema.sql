@@ -42,6 +42,25 @@ BEGIN
     RAISE EXCEPTION 'public.accounts is missing — migration 017 did not apply';
   END IF;
 
+  -- Phase 8 operational response intelligence is intentionally narrow, but
+  -- its reservation state and append-only audit trail are safety-critical.
+  IF to_regclass('public.incident_activity') IS NULL THEN
+    RAISE EXCEPTION 'public.incident_activity is missing — migration 047 did not apply';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    WHERE t.typname = 'resource_availability_enum' AND e.enumlabel = 'assigned'
+  ) THEN
+    RAISE EXCEPTION 'resource availability ASSIGNED enum value is missing — migration 046 did not apply';
+  END IF;
+
+  -- Phase 9 stores only coordinator review lifecycle; attention reasons stay
+  -- deterministically derived from the incident and delivery source records.
+  IF to_regclass('public.incident_follow_ups') IS NULL THEN
+    RAISE EXCEPTION 'public.incident_follow_ups is missing — migration 048 did not apply';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;

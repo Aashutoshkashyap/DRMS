@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { addContactTag, deleteContactTag } from '@/lib/contacts/tag-api';
 import { useAuth } from '@/hooks/use-auth';
-import { formatCurrency } from '@/lib/currency';
 import { toast } from 'sonner';
 import type { Contact, Tag, ContactTag, ContactNote, CustomField, ContactCustomValue, Deal, MessageTemplate } from '@/types';
 import {
@@ -37,7 +36,7 @@ import {
   Trash2,
   Save,
   X,
-  DollarSign,
+  ClipboardList,
   LayoutTemplate,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -57,7 +56,7 @@ export function ContactDetailView({
 }: ContactDetailViewProps) {
   const t = useTranslations('Contacts.detailView');
   const supabase = createClient();
-  const { accountId, defaultCurrency } = useAuth();
+  const { accountId } = useAuth();
 
   const [contact, setContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(false);
@@ -93,7 +92,8 @@ export function ContactDetailView({
   const [savingCustom, setSavingCustom] = useState(false);
   const [loadingCustom, setLoadingCustom] = useState(false);
 
-  // Deals tab
+  // Related incidents tab. The underlying collection is retained for
+  // backwards compatibility with the repurposed pipeline data model.
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loadingDeals, setLoadingDeals] = useState(false);
 
@@ -480,7 +480,7 @@ export function ContactDetailView({
                   value="deals"
                   className="data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
-                  {t('tabs.deals')}
+                  Related incidents
                 </TabsTrigger>
               </TabsList>
 
@@ -688,14 +688,14 @@ export function ContactDetailView({
                 )}
               </TabsContent>
 
-              {/* Deals Tab */}
+              {/* Related incidents tab */}
               <TabsContent value="deals" className="flex-1 overflow-y-auto px-4 py-3">
                 {loadingDeals ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="size-5 animate-spin text-primary" />
                   </div>
                 ) : deals.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">{t('dealsTab.noDeals')}</p>
+                  <p className="text-xs text-muted-foreground">No related incidents are recorded for this citizen yet.</p>
                 ) : (
                   <div className="space-y-2">
                     {deals.map((deal) => (
@@ -705,7 +705,7 @@ export function ContactDetailView({
                       >
                         <div className="flex items-start justify-between gap-2">
                           <p className="text-sm font-medium text-foreground">
-                            {deal.title}
+                            {deal.request_id || deal.title}
                           </p>
                           {deal.stage && (
                             <span
@@ -721,21 +721,16 @@ export function ContactDetailView({
                         </div>
                         <div className="mt-1.5 flex items-center justify-between text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
-                            <DollarSign className="size-3" />
-                            {formatCurrency(
-                              deal.value ?? 0,
-                              deal.currency || defaultCurrency,
-                            )}
+                            <ClipboardList className="size-3" />
+                            {(deal.category ?? "incident").replaceAll('_', ' ')}
                           </span>
-                          {deal.status && deal.status !== 'open' && (
+                          {deal.incident_status && (
                             <span
                               className={
-                                deal.status === 'won'
-                                  ? 'text-primary'
-                                  : 'text-red-400'
+                                'text-primary'
                               }
                             >
-                              {deal.status}
+                              {deal.incident_status.replaceAll('_', ' ')}
                             </span>
                           )}
                         </div>

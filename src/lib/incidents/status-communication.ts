@@ -103,3 +103,44 @@ export async function deliverIncidentStatusUpdate(
     throw error;
   }
 }
+
+/** Coordinator-only retry claim. A failed row is atomically returned to the
+ * existing pending outbox state before the normal delivery service is used.
+ * A second click cannot claim the same failed row, so it cannot create a
+ * second explicit retry. There is deliberately no background retry loop. */
+export async function retryFailedIncidentStatusUpdate(
+  db: SupabaseClient,
+  accountId: string,
+  dealId: string,
+): Promise<{ delivered: boolean; reason?: string }> {
+  const { data: incident, error: incidentError } = await db
+    .from("deals")
+    .select("incident_status")
+    .eq("account_id", accountId)
+    .eq("id", dealId)
+    .maybeSingle();
+  if (incidentError) throw new Error(`Could not load incident: ${incidentError.message}`);
+  if (!incident) return { delivered: false, reason: "not_found" };
+
+  const { data: failedDelivery, error: deliveryError } = await db
+    .from("incident_status_deliveries")
+    .select("id,delivery_status")
+    .eq("deal_id", dealId)
+    .eq("channel", "whatsapp")
+    .eq("incident_status", incident.incident_status)
+    .maybeSingle();
+  if (deliveryError) throw new Error(`Could not load status delivery: ${deliveryError.message}`);
+  if (!failedDelivery || failedDelivery.delivery_status !== "failed") return { delivered: false, reason: "not_failed" };
+
+  const { data: claimed, error: claimError } = await db
+    .from("incident_status_deliveries")
+    .update({ delivery_status: "pending", error_message: null })
+    .eq("id", failedDelivery.id)
+    .eq("delivery_status", "failed")
+    .select("id")
+    .maybeSingle();
+  if (claimError) throw new Error(`Could not request delivery retry: ${claimError.message}`);
+  if (!claimed) return { delivered: false, reason: "retry_in_progress" };
+
+  return deliverIncidentStatusUpdate(db, accountId, dealId);
+}

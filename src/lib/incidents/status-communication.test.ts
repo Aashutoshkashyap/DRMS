@@ -9,7 +9,7 @@ vi.mock('@/lib/whatsapp/send-message', () => ({
   sendMessageToConversation: h.sendMessageToConversation,
 }))
 
-import { deliverIncidentStatusUpdate } from './status-communication'
+import { deliverIncidentStatusUpdate, retryFailedIncidentStatusUpdate } from './status-communication'
 
 type Incident = {
   id: string
@@ -21,6 +21,39 @@ type Incident = {
 }
 
 type Delivery = { id: string; delivery_status: 'pending' | 'sent' } | null
+
+function makeRetryDb() {
+  let deliveryStatus: 'failed' | 'pending' | 'sent' = 'failed'
+  let claimed = false
+  const db = {
+    from(table: string) {
+      if (table === 'deals') {
+        const query = { eq: () => query, maybeSingle: async () => ({ data: baseIncident, error: null }) }
+        return { select: () => query }
+      }
+      if (table === 'incident_status_deliveries') {
+        const selectQuery = { eq: () => selectQuery, maybeSingle: async () => ({ data: { id: 'delivery-retry', delivery_status: deliveryStatus }, error: null }) }
+        const updateQuery = {
+          eq: () => updateQuery,
+          select: () => updateQuery,
+          maybeSingle: async () => {
+            if (deliveryStatus !== 'failed' || claimed) return { data: null, error: null }
+            claimed = true
+            deliveryStatus = 'pending'
+            return { data: { id: 'delivery-retry' }, error: null }
+          },
+        }
+        return { select: () => selectQuery, update: () => updateQuery }
+      }
+      if (table === 'response_teams' || table === 'vehicles') {
+        const query = { eq: () => query, maybeSingle: async () => ({ data: null, error: null }) }
+        return { select: () => query }
+      }
+      throw new Error(`Unexpected table: ${table}`)
+    },
+  }
+  return db as unknown as SupabaseClient
+}
 
 function makeDb(incident: Incident | null, delivery: Delivery) {
   const updates: { table: string; row: Record<string, unknown>; id: string }[] =
@@ -168,5 +201,12 @@ describe('deliverIncidentStatusUpdate', () => {
 
     expect(h.sendMessageToConversation).not.toHaveBeenCalled()
     expect(updates).toHaveLength(0)
+  })
+
+  it('allows only one explicit retry claim for a failed delivery', async () => {
+    const db = makeRetryDb()
+    await expect(retryFailedIncidentStatusUpdate(db, 'account-1', baseIncident.id)).resolves.toEqual({ delivered: true })
+    await expect(retryFailedIncidentStatusUpdate(db, 'account-1', baseIncident.id)).resolves.toEqual({ delivered: false, reason: 'not_failed' })
+    expect(h.sendMessageToConversation).toHaveBeenCalledTimes(1)
   })
 })

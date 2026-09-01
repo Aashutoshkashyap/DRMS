@@ -1,7 +1,7 @@
 "use client";
 
 import type { Deal, PipelineStage } from "@/types";
-import { MapPin, Users } from "lucide-react";
+import { AlertTriangle, MapPin, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 interface DealCardProps {
@@ -21,6 +21,8 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
   const t = useTranslations("Pipelines.card");
   const contactLabel = deal.contact?.name || deal.contact?.phone || t("noContact");
   const assigneeLabel = deal.assignee?.full_name || null;
+  const assignmentLabel = deal.assigned_team || deal.assigned_resource || assigneeLabel;
+  const requiresAssignment = deal.incident_status === "verified" && !deal.assigned_to && !deal.assigned_team && !deal.assigned_resource && !deal.assigned_team_id && !deal.assigned_vehicle_id && !deal.assigned_location_id && !deal.assigned_inventory_id;
 
   return (
     <button
@@ -47,12 +49,12 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
 
       <div className="flex items-start justify-between gap-2">
         <h4 className="flex-1 text-sm font-semibold leading-snug text-foreground break-words">
-          {deal.title}
+          {deal.request_id || deal.title}
         </h4>
         <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${deal.priority === 'critical' ? 'bg-red-500/15 text-red-400' : deal.priority === 'high' ? 'bg-amber-500/15 text-amber-500' : 'bg-muted text-muted-foreground'}`}>{deal.priority.toUpperCase()}</span>
       </div>
 
-      <p className="mt-1 text-[11px] font-medium tracking-wide text-primary">{deal.request_id}</p>
+      <p className="mt-1 text-[11px] font-medium tracking-wide text-primary">{deal.category.replaceAll("_", " ")} · {stage?.name || deal.incident_status.replaceAll("_", " ")}</p>
 
       {/* Contact row */}
       <div className="mt-2 flex items-center gap-2">
@@ -67,16 +69,8 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
         <span className="flex items-center gap-1"><Users className="h-3 w-3" />{deal.people_affected} affected · {deal.category.replace('_', ' ')}</span>
       </div>
 
-      {assigneeLabel && (
-        <div className="mt-2 flex items-center justify-end">
-          <span
-            title={assigneeLabel}
-            className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary"
-          >
-            {initials(assigneeLabel)}
-          </span>
-        </div>
-      )}
+      {assignmentLabel && <p className="mt-2 truncate text-[11px] text-primary">Assigned: {assignmentLabel}</p>}
+      {requiresAssignment && <p className="mt-2 flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400"><AlertTriangle className="h-3 w-3" />Follow-up required: assign response</p>}
     </button>
   );
 }

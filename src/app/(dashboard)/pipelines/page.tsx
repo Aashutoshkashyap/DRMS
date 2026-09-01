@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Pipeline, PipelineStage, Deal } from "@/types";
 import { PipelineBoard } from "@/components/pipelines/pipeline-board";
 import { PipelineSettings } from "@/components/pipelines/pipeline-settings";
 import { DealForm } from "@/components/pipelines/deal-form";
-import { PipelineAnalytics } from "@/components/pipelines/pipeline-analytics";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,6 +41,7 @@ import { requestIncidentStatusNotification } from "@/lib/incidents/request-notif
 // Spec-defined seed — name and color per the product spec.
 export default function PipelinesPage() {
   const t = useTranslations("Pipelines.page");
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const canEditSettings = useCan("edit-settings");
   const canCreateDeals = useCan("send-messages");
@@ -63,12 +64,22 @@ export default function PipelinesPage() {
   const [dealFormOpen, setDealFormOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [defaultStageId, setDefaultStageId] = useState<string>("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const status = searchParams.get("status");
+    return status && ["received", "verified", "assigned", "dispatched", "in_progress", "resolved"].includes(status) ? status : "all";
+  });
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState(() => {
+    const priority = searchParams.get("priority");
+    return priority && ["critical", "high", "medium", "low"].includes(priority) ? priority : "all";
+  });
+  const [locationField, setLocationField] = useState<"location" | "municipality" | "district">("location");
+  const [locationFilter, setLocationFilter] = useState("");
 
   // Guard against double-seeding (React StrictMode double-effect in dev).
   const seedAttempted = useRef(false);
+  const openedIncidentRef = useRef<string | null>(null);
+
 
   const loadPipelines = useCallback(async () => {
     const { data, error } = await supabase
@@ -181,6 +192,21 @@ export default function PipelinesPage() {
     };
   }, [selectedPipelineId, loadStages, loadDeals]);
 
+  // Follow-up links open the existing case sheet; they do not introduce a
+  // second incident detail route or bypass the established workflow controls.
+  useEffect(() => {
+    const incidentId = searchParams.get("incident");
+    const incident = incidentId ? deals.find((deal) => deal.id === incidentId) : null;
+    if (!incident || openedIncidentRef.current === incidentId) return;
+    const timer = window.setTimeout(() => {
+      openedIncidentRef.current = incidentId;
+      setEditingDeal(incident);
+      setDefaultStageId(incident.stage_id);
+      setDealFormOpen(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [deals, searchParams]);
+
   const refreshPipelines = useCallback(async () => {
     const list = await loadPipelines();
     setPipelines(list);
@@ -287,7 +313,8 @@ export default function PipelinesPage() {
   const filteredDeals = deals.filter((request) =>
     (statusFilter === "all" || request.incident_status === statusFilter) &&
     (categoryFilter === "all" || request.category === categoryFilter) &&
-    (priorityFilter === "all" || request.priority === priorityFilter),
+    (priorityFilter === "all" || request.priority === priorityFilter) &&
+    (!locationFilter.trim() || (request[locationField] ?? "").toLocaleLowerCase().includes(locationFilter.trim().toLocaleLowerCase())),
   );
 
   if (loading) {
@@ -309,13 +336,13 @@ export default function PipelinesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Disaster coordination</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Track citizen requests through human verification, assignment, dispatch, and resolution.</p>
+        <h1 className="text-2xl font-semibold text-foreground">Incidents & response workflow</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Track relief cases through human verification, assignment, dispatch, and resolution.</p>
       </div>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          {/* Pipeline selector dropdown */}
+          {/* Response-workflow selector; underlying configurable pipeline data is preserved. */}
           <DropdownMenu>
             <DropdownMenuTrigger
               className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors data-[popup-open]:bg-muted"
@@ -356,7 +383,7 @@ export default function PipelinesPage() {
                   className="text-popover-foreground"
                 >
                   <Settings className="mr-2 h-3.5 w-3.5" />
-                  {t("managePipelines")}
+                  Manage response workflow
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -367,22 +394,22 @@ export default function PipelinesPage() {
           <GatedButton
             variant="outline"
             canAct={canEditSettings}
-            gateReason="create pipelines"
+            gateReason="manage response workflows"
             onClick={() => setNewPipelineOpen(true)}
             className="border-border bg-card text-foreground hover:bg-muted"
           >
             <Plus className="mr-1 h-4 w-4" />
-            {t("addPipeline")}
+            New workflow
           </GatedButton>
           <GatedButton
             canAct={canCreateDeals}
-            gateReason="create deals"
+            gateReason="create incidents"
             disabled={!selectedPipelineId || stages.length === 0}
             onClick={() => handleAddDeal()}
             className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="mr-1 h-4 w-4" />
-            {t("addDeal")}
+            New incident
           </GatedButton>
         </div>
       </div>
@@ -395,16 +422,16 @@ export default function PipelinesPage() {
             {t("noPipelinesYet")}
           </h3>
           <p className="mt-2 text-sm text-muted-foreground">
-            {t("createToStartTracking")}
+            Create a response workflow to begin tracking incidents.
           </p>
           <GatedButton
             canAct={canEditSettings}
-            gateReason="create pipelines"
+            gateReason="manage response workflows"
             onClick={() => setNewPipelineOpen(true)}
             className="mt-4 bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Plus className="mr-1 h-4 w-4" />
-            {t("createPipeline")}
+            Create response workflow
           </GatedButton>
         </div>
       ) : (
@@ -413,8 +440,9 @@ export default function PipelinesPage() {
             <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="all">All statuses</option><option value="received">Received</option><option value="verified">Verified</option><option value="assigned">Assigned</option><option value="dispatched">Dispatched</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select>
             <select aria-label="Filter by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="all">All categories</option><option value="rescue">Rescue</option><option value="food_water">Food / Water</option><option value="medicine">Medicine</option><option value="shelter">Shelter</option><option value="missing_person">Missing person</option><option value="information">Information</option></select>
             <select aria-label="Filter by priority" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+            <select aria-label="Location field" value={locationField} onChange={(event) => setLocationField(event.target.value as "location" | "municipality" | "district")} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="location">Exact location</option><option value="municipality">Municipality</option><option value="district">District</option></select>
+            <Input aria-label="Filter by location" value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} placeholder="Filter location" className="h-9 w-44 border-border bg-muted text-foreground" />
           </div>
-          <PipelineAnalytics stages={stages} deals={filteredDeals} />
           <PipelineBoard
             stages={stages}
             deals={filteredDeals}
@@ -429,21 +457,21 @@ export default function PipelinesPage() {
       <Dialog open={newPipelineOpen} onOpenChange={setNewPipelineOpen}>
         <DialogContent className="sm:max-w-sm bg-popover border-border">
           <DialogHeader>
-            <DialogTitle className="text-popover-foreground">{t("newPipeline")}</DialogTitle>
+            <DialogTitle className="text-popover-foreground">New response workflow</DialogTitle>
           </DialogHeader>
           <div className="py-2">
-            <Label className="text-muted-foreground">{t("pipelineName")}</Label>
+            <Label className="text-muted-foreground">Workflow name</Label>
             <Input
               value={newPipelineName}
               onChange={(e) => setNewPipelineName(e.target.value)}
-              placeholder={t("pipelineNamePlaceholder")}
+              placeholder="e.g. Disaster response workflow"
               className="mt-2 bg-muted border-border text-foreground"
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleCreatePipeline();
               }}
             />
             <p className="mt-2 text-xs text-muted-foreground">
-              {t("defaultStagesDesc")}
+              This keeps the configurable response status workflow used by incidents.
             </p>
           </div>
           <DialogFooter className="bg-popover/50 border-border">
@@ -459,7 +487,7 @@ export default function PipelinesPage() {
               disabled={creating || !newPipelineName.trim()}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              {creating ? t("creating") : t("createPipelineBtn")}
+              {creating ? t("creating") : "Create workflow"}
             </Button>
           </DialogFooter>
         </DialogContent>

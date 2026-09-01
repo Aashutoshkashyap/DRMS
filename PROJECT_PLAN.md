@@ -170,6 +170,38 @@ If the intended work is instead a migration to a different stack, database, host
 - Keep rescue, medical, and missing-person detail prompts where operationally required. Food/water, shelter, and information receive an explicit deterministic default description when the citizen supplied no additional detail.
 - Preserve numeric OpenWA service selection, Meta interactive replies, map-pin coordinates, duplicate-message protection, and the no-AI runtime guarantee. No SMS code or transport behavior is changed.
 
+### Phase 8 — Operational Response Intelligence
+
+**Status:** Implemented. Migrations `046`–`047` are applied to the linked Supabase project; fictional records were seeded only into the explicitly flagged `DEMO DATA` account.
+
+- Keep `deals` as the incident model and extend it only with optional municipality/district and durable references to the already-existing team, vehicle, location, and inventory records. Existing text assignments remain for compatibility.
+- Add deterministic category-compatible recommendations from stored inventory categories, location types, team names, vehicle types, verified availability, and Haversine distance. Unknown or incompatible records are not recommended.
+- Require an authenticated coordinator to confirm a selection through one database transaction. It locks only the requested incident/resource rows, rejects stale availability, records an append-only activity entry, marks only selected records `ASSIGNED`, and moves the incident only to `ASSIGNED` after `VERIFIED`. It never dispatches, resolves, or sends a new message by itself.
+- Add append-only `incident_activity` records for incident creation, status movement, coordinator confirmation, case notes, and queued/sent/failed status communications. Existing status-delivery idempotency and failure handling remain unchanged.
+- Expand the existing incident sheet into the operational case centre with citizen communication, coordinates, deterministic resource review, assignment confirmation, visible workflow, timeline, notes, and location metadata. The dashboard now derives every requested response-status count and groups by exact location, municipality, or district.
+- Extend the guarded demo script with fictional compatible/assigned/unavailable resources, multiple distances, a critical medical case, locality data, status history, and a simulated failed delivery. The seed contacted no external service.
+
+### Phase 9 — Follow-up, Escalation & Coordinator Attention
+
+**Status:** Implemented. Migration `048` is applied to the linked Supabase project; fictional records were refreshed only in the explicitly flagged `DEMO DATA` account.
+
+- Keep the existing `deals` incident model, `incident_status_deliveries` outbox, `incident_activity` timeline, account-scoped RLS, and follow-up policy settings. Add only `incident_follow_ups` to retain coordinator review/clear lifecycle metadata for one incident attention item, rather than creating generic CRM tasks or duplicate reminder systems.
+- Derive the active queue once from current stored state: `UNASSIGNED` only for `VERIFIED` incidents without a coordinator/team/resource; `COMMUNICATION_FAILED` only when the latest stored citizen status delivery for an incident failed; and `OVERDUE` only when its matching explicit account threshold is exceeded. There is currently no stored workflow signal for `COORDINATOR_ACTION_REQUIRED`, so the system does not fabricate that condition.
+- A review is recorded as `reviewed` but never suppresses an unresolved condition. When the source condition clears, reconciliation marks the persistent row cleared and records append-only activity. The dashboard, `/follow-up`, and case centre all consume the same deterministic attention definition.
+- Reuse the existing authenticated WhatsApp status-delivery service for one explicit retry action. A failed delivery must first be atomically returned to its existing `pending` outbox state, so a second coordinator click cannot create a second explicit retry; there is no background retry loop or automatic citizen messaging.
+- Add the requested fictional queue scenarios to guarded demo data: critical unassigned, high unassigned with a simulated failed communication, a configured two-hour dispatched overdue case reviewed but unresolved, a normal assigned case, and a resolved case. The seed has no external side effects.
+
+### Phase 10 — Demonstration-ready operations UI
+
+**Status:** Implemented locally; no schema or transport changes.
+
+- Keep the established incident, resource, communication, follow-up, account/RLS, and WhatsApp paths intact while refining the primary coordinator interface for disaster-relief operations.
+- Rename visible sales-centric primary UI language to incident, citizen, response workflow, coordinator, and related-incident terminology without renaming the backward-compatible `deals` database model.
+- Make every dashboard metric a navigable operational action, retain the deterministic follow-up queue, and show request ID, priority, requester, location, people affected, assignment, and explicit follow-up attention on incident cards.
+- Keep resource suggestions explicitly non-authoritative: only a coordinator can confirm an assignment, assignment never dispatches, and stored availability is not presented as live tracking.
+- Remove inherited AI drafting and auto-reply controls from the primary inbox surface. The retained emergency intake, Flow, and explicitly configured automation paths are deterministic; no WhatsApp transport, inbound webhook, or provider configuration changes are made.
+- Keep coordinator-only notes clearly separate from citizen communication and make incident context visible in the inbox contact panel. The demo data remains fictional and isolated to the explicitly flagged `DEMO DATA` account.
+
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |
 | `npm run lint` | Passed | 0 errors; 35 inherited warnings remain outside this milestone. |
@@ -178,3 +210,6 @@ If the intended work is instead a migration to a different stack, database, host
 | `npm run build` | Environment-blocked | Next.js 16 reached “Creating an optimized production build”, then could not complete in this workspace because `next/font/google` must fetch Inter and outbound DNS/network access is restricted. No source build error was reported. |
 | OpenWA pin/photo follow-up | Passed locally | 90 test files / 859 tests; map pins reach incident coordinates, image base64 is stored in the existing `chat-media` bucket, and the full typecheck/lint pass with the pre-existing 35 warnings. A production build was retried but remained blocked at Next’s external font-fetch step in this workspace. |
 | Phase 7 | Passed locally | `npm run typecheck`, 90 test files / 866 tests, and lint (0 errors; 35 inherited warnings) pass. Coverage includes a prior multi-message journey, multi-field food request, partial input, known citizen reuse, location pin, edit, invalid field, restart/continue, duplicate confirmation, and existing Meta/OpenWA paths. |
+| Phase 8 | Passed locally and migration applied | `npm run typecheck`; 92 test files / 874 tests; lint with 0 errors and the same 35 inherited warnings. Focused coverage verifies category compatibility, nearest compatible ranking, unavailable exclusion, stale-resource rejection, coordinator-only confirmation route, status delivery idempotency, and stored locality grouping. Remote migration history records `046` and `047`; remote schema verification passed. Local Docker validation remains unavailable because Docker/Podman is not installed. |
+| Phase 9 | Passed locally and migration applied | `npm run lint` completed with 0 errors and the inherited 35 warnings; `npm run typecheck` passed; `npm test` passed 92 files / 879 tests. Migration `048` applied, remote schema verification passed, and migration history matches through `048`. A production build was not rerun because this workspace's prior Next external Google Fonts/DNS block remains unresolved. The guarded demo run contains 6 incidents, 1 critical unassigned, 1 high unassigned, 1 failed delivery, 1 reviewed overdue follow-up, and 27 timeline entries; no external provider was contacted. |
+| Phase 10 | Passed locally except browser/build environment checks | `npm run typecheck` passed; `npm run lint` completed with 0 errors and 36 inherited warnings; `npm test` passed 92 files / 879 tests. The browser agent cannot resolve its required service from this environment, so authenticated browser smoke testing is unavailable. `npm run build` reaches Next.js 16's optimized compilation stage but cannot complete in this restricted workspace; the trace marks the Turbopack build failed without a source-code diagnostic, consistent with the prior external Google Fonts/DNS limitation. |

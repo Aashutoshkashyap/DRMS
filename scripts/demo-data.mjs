@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 const DEMO_CONFIRMATION = "DEMO DATA";
-const DEMO_VERSION = "phase-6.0";
+const DEMO_VERSION = "phase-9.0";
 const command = process.argv[2];
 
 function fail(message) {
@@ -105,6 +105,18 @@ async function seed(db, context) {
   }).select("id"), "create demo seed run");
   const runId = run.id;
 
+  // This is the sole explicit demo policy for overdue attention. The runtime
+  // has no fallback SLA when this row is absent.
+  const { error: followUpSettingsError } = await db.from("incident_follow_up_settings").upsert({
+    account_id: context.accountId,
+    dispatched_after_hours: 2,
+    received_after_hours: null,
+    assigned_after_hours: null,
+    updated_by_user_id: context.actorUserId,
+  });
+  if (followUpSettingsError) fail(`Could not configure demo follow-up policy: ${followUpSettingsError.message}`);
+  await record(db, runId, context.accountId, "incident_follow_up_settings", context.accountId);
+
   const pipelineId = await insertAndRecord(db, runId, context, "pipelines", "pipeline", {
     account_id: context.accountId,
     user_id: context.actorUserId,
@@ -125,7 +137,9 @@ async function seed(db, context) {
   for (const location of [
     ["Kathmandu Relief Centre — DEMO DATA", "relief_center", "Boudha, Kathmandu", 27.7219, 85.3624, "DEMO ONLY", "available"],
     ["Bharatpur Relief Centre — DEMO DATA", "relief_center", "Bharatpur, Chitwan", 27.6766, 84.4350, "DEMO ONLY", "available"],
-    ["Pokhara Medical Facility — DEMO DATA", "medical_facility", "Lakeside, Pokhara", 28.2096, 83.9595, "DEMO ONLY", "limited"],
+    ["Pokhara Medical Facility — DEMO DATA", "medical_facility", "Lakeside, Pokhara", 28.2096, 83.9595, "DEMO ONLY", "assigned"],
+    ["Kathmandu Medical Facility — DEMO DATA", "medical_facility", "Chabahil, Kathmandu", 27.7178, 85.3472, "DEMO ONLY", "available"],
+    ["Bhaktapur Shelter — DEMO DATA", "shelter", "Bhaktapur, Bagmati", 27.6710, 85.4298, "DEMO ONLY", "assigned"],
     ["Kathmandu Response Base — DEMO DATA", "team_location", "Chabahil, Kathmandu", 27.7172, 85.3467, "DEMO ONLY", "available"],
   ]) {
     const [name, locationType, address, latitude, longitude, contact, availability] = location;
@@ -148,7 +162,7 @@ async function seed(db, context) {
     name: "Kathmandu Search & Rescue — DEMO DATA",
     contact: "DEMO ONLY",
     location_id: locationIds["Kathmandu Response Base — DEMO DATA"],
-    availability: "available",
+    availability: "assigned",
   });
   const pokharaTeam = await insertAndRecord(db, runId, context, "response_teams", "response_team", {
     account_id: context.accountId,
@@ -156,19 +170,19 @@ async function seed(db, context) {
     name: "Pokhara Medical Response — DEMO DATA",
     contact: "DEMO ONLY",
     location_id: locationIds["Pokhara Medical Facility — DEMO DATA"],
-    availability: "limited",
+    availability: "assigned",
   });
-  await insertAndRecord(db, runId, context, "vehicles", "vehicle", {
+  const rescueVehicle = await insertAndRecord(db, runId, context, "vehicles", "vehicle", {
     account_id: context.accountId,
     user_id: context.actorUserId,
-    vehicle_type: "Ambulance",
+    vehicle_type: "Rescue vehicle",
     identifier: "DEMO-AMB-01",
     team_id: kathmanduTeam,
     location_id: locationIds["Kathmandu Response Base — DEMO DATA"],
     contact: "DEMO ONLY",
-    availability: "available",
+    availability: "assigned",
   });
-  await insertAndRecord(db, runId, context, "vehicles", "vehicle", {
+  const medicalVehicle = await insertAndRecord(db, runId, context, "vehicles", "vehicle", {
     account_id: context.accountId,
     user_id: context.actorUserId,
     vehicle_type: "Medical van",
@@ -176,14 +190,34 @@ async function seed(db, context) {
     team_id: pokharaTeam,
     location_id: locationIds["Pokhara Medical Facility — DEMO DATA"],
     contact: "DEMO ONLY",
-    availability: "limited",
+    availability: "assigned",
+  });
+  await insertAndRecord(db, runId, context, "vehicles", "vehicle", {
+    account_id: context.accountId,
+    user_id: context.actorUserId,
+    vehicle_type: "Ambulance",
+    identifier: "DEMO-AMB-02",
+    location_id: locationIds["Kathmandu Medical Facility — DEMO DATA"],
+    contact: "DEMO ONLY",
+    availability: "available",
+  });
+  await insertAndRecord(db, runId, context, "vehicles", "vehicle", {
+    account_id: context.accountId,
+    user_id: context.actorUserId,
+    vehicle_type: "Ambulance",
+    identifier: "DEMO-AMB-OOS",
+    location_id: locationIds["Kathmandu Medical Facility — DEMO DATA"],
+    contact: "DEMO ONLY",
+    availability: "unavailable",
   });
   for (const inventory of [
     ["food", "Food kits — DEMO DATA", 120, "kits", "Bharatpur Relief Centre — DEMO DATA"],
     ["water", "Water containers — DEMO DATA", 300, "litres", "Bharatpur Relief Centre — DEMO DATA"],
-    ["medicine", "First-aid packs — DEMO DATA", 40, "packs", "Pokhara Medical Facility — DEMO DATA"],
+    ["food", "Emergency food kits — DEMO DATA", 80, "kits", "Kathmandu Relief Centre — DEMO DATA"],
+    ["medicine", "First-aid packs — DEMO DATA", 40, "packs", "Pokhara Medical Facility — DEMO DATA", "assigned"],
+    ["medicine", "Medical supplies — DEMO DATA", 30, "packs", "Kathmandu Medical Facility — DEMO DATA"],
   ]) {
-    const [itemCategory, itemName, quantity, unit, locationName] = inventory;
+    const [itemCategory, itemName, quantity, unit, locationName, itemAvailability = "available"] = inventory;
     await insertAndRecord(db, runId, context, "relief_inventory", "relief_inventory", {
       account_id: context.accountId,
       user_id: context.actorUserId,
@@ -192,23 +226,24 @@ async function seed(db, context) {
       quantity,
       unit,
       location_id: locationIds[locationName],
-      availability: "available",
+      availability: itemAvailability,
     });
   }
 
+  const overdueUpdatedAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
   const cases = [
-    ["DEMO-RESCUE-001", "Aasha Gurung — DEMO DATA", "977000000001", "rescue", "critical", "received", "Boudha, Kathmandu", "Fictional citizen reports people trapped after a landslide.", 27.7210, 85.3612, 4, null, null],
-    ["DEMO-FOOD-002", "Bikash Thapa — DEMO DATA", "977000000002", "food_water", "high", "verified", "Bharatpur, Chitwan", "Fictional family needs food and water after flooding.", 27.6770, 84.4360, 6, null, null],
-    ["DEMO-MED-003", "Chandra Rai — DEMO DATA", "977000000003", "medicine", "high", "assigned", "Lakeside, Pokhara", "Fictional urgent medical assistance request.", 28.2102, 83.9602, 2, "Pokhara Medical Response — DEMO DATA", "DEMO-MED-01"],
-    ["DEMO-SHELTER-004", "Dawa Sherpa — DEMO DATA", "977000000004", "shelter", "medium", "dispatched", "Nepalgunj, Banke", "Fictional household requires temporary shelter.", 28.0500, 81.6167, 5, "Kathmandu Search & Rescue — DEMO DATA", "DEMO-AMB-01"],
-    ["DEMO-MISSING-005", "Esha Karki — DEMO DATA", "977000000005", "missing_person", "critical", "in_progress", "Dhangadhi, Kailali", "Fictional missing-person report awaiting coordinator follow-up.", 28.7010, 80.5890, 1, "Kathmandu Search & Rescue — DEMO DATA", "DEMO-AMB-01"],
-    ["DEMO-INFO-006", "Farid Alam — DEMO DATA", "977000000006", "information", "low", "resolved", "Lalitpur, Bagmati", "Fictional request for verified relief-centre information.", 27.6644, 85.3188, 3, null, null],
+    ["DEMO-RESCUE-001", "Aasha Gurung — DEMO DATA", "977000000001", "rescue", "critical", "verified", "Boudha, Kathmandu", "Kathmandu", "Kathmandu", "Fictional citizen reports people trapped after a landslide.", 27.7210, 85.3612, 4, null, null, null, null, null, null],
+    ["DEMO-FOOD-002", "Bikash Thapa — DEMO DATA", "977000000002", "food_water", "high", "verified", "Bharatpur, Chitwan", "Bharatpur", "Chitwan", "Fictional family needs food and water after flooding.", 27.6770, 84.4360, 6, null, null, null, null, null, null],
+    ["DEMO-MED-003", "Chandra Rai — DEMO DATA", "977000000003", "medicine", "critical", "assigned", "Lakeside, Pokhara", "Pokhara", "Kaski", "Fictional urgent medical assistance request.", 28.2102, 83.9602, 4, "Pokhara Medical Response — DEMO DATA", "DEMO-MED-01", pokharaTeam, medicalVehicle, null, null],
+    ["DEMO-SHELTER-004", "Dawa Sherpa — DEMO DATA", "977000000004", "shelter", "medium", "dispatched", "Bhaktapur, Bagmati", "Bhaktapur", "Bhaktapur", "Fictional household requires temporary shelter.", 27.6715, 85.4301, 5, null, "Bhaktapur Shelter — DEMO DATA", null, null, locationIds["Bhaktapur Shelter — DEMO DATA"], overdueUpdatedAt],
+    ["DEMO-MISSING-005", "Esha Karki — DEMO DATA", "977000000005", "missing_person", "critical", "in_progress", "Chabahil, Kathmandu", "Kathmandu", "Kathmandu", "Fictional missing-person report with confirmed response ownership.", 27.7174, 85.3464, 1, "Kathmandu Search & Rescue — DEMO DATA", "DEMO-AMB-01", kathmanduTeam, rescueVehicle, null, null],
+    ["DEMO-INFO-006", "Farid Alam — DEMO DATA", "977000000006", "information", "low", "resolved", "Lalitpur, Bagmati", "Lalitpur", "Lalitpur", "Fictional request for verified relief-centre information.", 27.6644, 85.3188, 3, null, null, null, null, null, null],
   ];
 
   const incidentIds = {};
   const conversationIds = {};
   for (const entry of cases) {
-    const [requestId, name, phone, category, priority, status, location, description, latitude, longitude, peopleAffected, assignedTeam, assignedResource] = entry;
+    const [requestId, name, phone, category, priority, status, location, municipality, district, description, latitude, longitude, peopleAffected, assignedTeam, assignedResource, assignedTeamId, assignedVehicleId, assignedLocationId, updatedAt] = entry;
     const contactId = await insertAndRecord(db, runId, context, "contacts", "contact", {
       account_id: context.accountId,
       user_id: context.actorUserId,
@@ -240,17 +275,32 @@ async function seed(db, context) {
       priority,
       incident_status: status,
       location,
+      municipality,
+      district,
       latitude,
       longitude,
       people_affected: peopleAffected,
       description,
       assigned_team: assignedTeam,
       assigned_resource: assignedResource,
+      assigned_team_id: assignedTeamId,
+      assigned_vehicle_id: assignedVehicleId,
+      assigned_location_id: assignedLocationId,
       value: 0,
       currency: "NPR",
       status: status === "resolved" ? "won" : "open",
+      updated_at: updatedAt ?? undefined,
     });
     incidentIds[requestId] = incidentId;
+    const workflow = ["received", "verified", "assigned", "dispatched", "in_progress", "resolved"];
+    for (let index = 1; index <= workflow.indexOf(status); index += 1) {
+      const { error: activityError } = await db.from("incident_activity").insert({ account_id: context.accountId, deal_id: incidentId, actor_user_id: context.actorUserId, action: "status_changed", previous_value: workflow[index - 1], next_value: workflow[index] });
+      if (activityError) fail(`Could not create demo incident timeline: ${activityError.message}`);
+    }
+    if (assignedTeam || assignedResource) {
+      const { error: activityError } = await db.from("incident_activity").insert({ account_id: context.accountId, deal_id: incidentId, actor_user_id: context.actorUserId, action: "assignment_confirmed", next_value: "assigned", metadata: { team: assignedTeam, vehicle: assignedResource } });
+      if (activityError) fail(`Could not create demo assignment activity: ${activityError.message}`);
+    }
     await insertAndRecord(db, runId, context, "messages", "message", {
       conversation_id: conversationId,
       sender_type: "customer",
@@ -277,6 +327,15 @@ async function seed(db, context) {
     incident_status: "verified",
     delivery_status: "failed",
     error_message: "DEMO DATA — simulated provider delivery failure; no message was sent.",
+  });
+
+  await insertAndRecord(db, runId, context, "incident_follow_ups", "incident_follow_up", {
+    account_id: context.accountId,
+    deal_id: incidentIds["DEMO-SHELTER-004"],
+    status: "reviewed",
+    reason_codes: ["overdue"],
+    reviewed_at: new Date().toISOString(),
+    reviewed_by_user_id: context.actorUserId,
   });
 
   console.log(`Created fictional DEMO DATA run ${runId} for ${context.accountName}. No WhatsApp, SMS, or external service was contacted.`);
@@ -308,6 +367,7 @@ async function reset(db, context) {
     byType.set(item.entity_type, ids);
   }
   const deletes = [
+    ["incident_follow_up", "incident_follow_ups", true],
     ["incident_status_delivery", "incident_status_deliveries", true],
     ["message", "messages", false],
     ["incident", "deals", true],
@@ -327,6 +387,11 @@ async function reset(db, context) {
     if (accountScoped) query = query.eq("account_id", context.accountId);
     const { error } = await query;
     if (error) fail(`Could not reset demo ${entityType}: ${error.message}`);
+  }
+
+  if (byType.has("incident_follow_up_settings")) {
+    const { error } = await db.from("incident_follow_up_settings").delete().eq("account_id", context.accountId);
+    if (error) fail(`Could not reset demo follow-up settings: ${error.message}`);
   }
 
   const { error: recordError } = await db.from("demo_seed_records").delete().eq("run_id", run.id).eq("account_id", context.accountId);

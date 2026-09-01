@@ -12,7 +12,7 @@ import {
   Check,
   User,
   Tag as TagIcon,
-  DollarSign,
+  ClipboardList,
   StickyNote,
   Plus,
 } from "lucide-react";
@@ -210,29 +210,24 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
           {/* Divider */}
           <div className="my-4 border-t border-border" />
 
-          {/* Active Deals */}
+          {/* Related incidents stay in the coordinator-only contact panel. */}
           <div>
             <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <DollarSign className="h-3 w-3" />
-              {tSidebar("deals")}
+              <ClipboardList className="h-3 w-3" />
+              Related incidents
             </div>
             <div className="mt-2 space-y-2">
               {deals.length === 0 ? (
-                <p className="px-1 text-xs text-muted-foreground">{tSidebar("noDeals")}</p>
+                <p className="px-1 text-xs text-muted-foreground">No related incidents.</p>
               ) : (
                 deals.map((deal) => (
                   <div
                     key={deal.id}
                     className="rounded-lg bg-muted px-3 py-2"
                   >
-                    <p className="text-sm font-medium text-foreground">
-                      {deal.title}
-                    </p>
+                    <p className="text-sm font-medium text-foreground">{deal.request_id || deal.title}</p>
                     <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>
-                        {deal.currency ?? "$"}
-                        {deal.value.toLocaleString()}
-                      </span>
+                      <span>{deal.category?.replaceAll("_", " ") || "Incident"}</span>
                       {deal.stage && (
                         <span
                           className="rounded-full px-1.5 py-0.5 text-[10px]"
@@ -254,13 +249,14 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
           {/* Divider */}
           <div className="my-4 border-t border-border" />
 
-          {/* Notes */}
+          {/* Coordinator-only notes are never included in citizen messages. */}
           <div>
             <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               <StickyNote className="h-3 w-3" />
-              {tSidebar("notes")}
+              Coordinator notes
             </div>
             <div className="mt-2">
+              <p className="mb-2 px-1 text-xs text-muted-foreground">Visible only to coordinators; not sent to the citizen.</p>
               <div className="flex gap-2">
                 <textarea
                   value={newNote}

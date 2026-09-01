@@ -29,6 +29,8 @@ import { requestIncidentStatusNotification } from "@/lib/incidents/request-notif
 import { useTranslations } from "next-intl";
 import { IncidentNotes } from "@/components/incidents/incident-notes";
 import { ResourceRecommendations } from "@/components/incidents/resource-recommendations";
+import { IncidentTimeline } from "@/components/incidents/incident-timeline";
+import { IncidentFollowUp } from "@/components/incidents/incident-follow-up";
 
 interface DealFormProps {
   open: boolean;
@@ -60,18 +62,17 @@ export function DealForm({
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<IncidentCategory>("information");
   const [location, setLocation] = useState("");
+  const [municipality, setMunicipality] = useState("");
+  const [district, setDistrict] = useState("");
   const [landmark, setLandmark] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
   const [peopleAffected, setPeopleAffected] = useState("1");
   const [priority, setPriority] = useState<IncidentPriority>("medium");
-  const [assignedTeam, setAssignedTeam] = useState("");
-  const [assignedResource, setAssignedResource] = useState("");
+  const [caseStatus, setCaseStatus] = useState<Deal["incident_status"]>("received");
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [teams, setTeams] = useState<Array<{ id: string; name: string; availability: string }>>([]);
-  const [vehicles, setVehicles] = useState<Array<{ id: string; identifier: string; vehicle_type: string; availability: string }>>([]);
   const [linkedConversation, setLinkedConversation] =
     useState<Conversation | null>(null);
 
@@ -96,21 +97,23 @@ export function DealForm({
       setDescription(deal.description ?? deal.notes ?? "");
       setCategory(deal.category ?? "information");
       setLocation(deal.location ?? "");
+      setMunicipality(deal.municipality ?? "");
+      setDistrict(deal.district ?? "");
       setLandmark(deal.landmark ?? "");
       setLatitude(deal.latitude?.toString() ?? "");
       setLongitude(deal.longitude?.toString() ?? "");
       setPeopleAffected(String(deal.people_affected ?? 1));
       setPriority(deal.priority ?? "medium");
-      setAssignedTeam(deal.assigned_team ?? "");
-      setAssignedResource(deal.assigned_resource ?? "");
+      setCaseStatus(deal.incident_status);
     } else {
       setTitle("");
       setContactId("");
       setStageId(defaultStageId || stages[0]?.id || "");
       setAssignedTo("");
       setDescription("");
-      setCategory("information"); setLocation(""); setLandmark(""); setLatitude(""); setLongitude("");
-      setPeopleAffected("1"); setPriority("medium"); setAssignedTeam(""); setAssignedResource("");
+      setCategory("information"); setLocation(""); setMunicipality(""); setDistrict(""); setLandmark(""); setLatitude(""); setLongitude("");
+      setPeopleAffected("1"); setPriority("medium");
+      setCaseStatus("received");
     }
   }, [open, deal, defaultStageId, stages]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -120,17 +123,13 @@ export function DealForm({
     if (!open) return;
     let cancelled = false;
     (async () => {
-      const [c, p, teamResult, vehicleResult] = await Promise.all([
+      const [c, p] = await Promise.all([
         supabase.from("contacts").select("*").order("name"),
         supabase.from("profiles").select("*").order("full_name"),
-        supabase.from("response_teams").select("id,name,availability").order("name"),
-        supabase.from("vehicles").select("id,identifier,vehicle_type,availability").order("identifier"),
       ]);
       if (cancelled) return;
       setContacts((c.data ?? []) as Contact[]);
       setProfiles((p.data ?? []) as Profile[]);
-      setTeams((teamResult.data ?? []) as Array<{ id: string; name: string; availability: string }>);
-      setVehicles((vehicleResult.data ?? []) as Array<{ id: string; identifier: string; vehicle_type: string; availability: string }>);
     })();
     return () => {
       cancelled = true;
@@ -183,14 +182,14 @@ export function DealForm({
       category,
       requester_name: title.trim(),
       location: location.trim(),
+      municipality: municipality.trim() || null,
+      district: district.trim() || null,
       landmark: landmark.trim() || null,
       latitude: latitude ? Number(latitude) : null,
       longitude: longitude ? Number(longitude) : null,
       people_affected: Math.floor(Number(peopleAffected)),
       priority,
       description: description.trim() || null,
-      assigned_team: assignedTeam.trim() || null,
-      assigned_resource: assignedResource.trim() || null,
     };
 
     if (deal) {
@@ -256,12 +255,12 @@ export function DealForm({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="bg-popover border-border text-popover-foreground sm:max-w-lg w-full p-0"
+        className="bg-popover border-border text-popover-foreground sm:max-w-2xl w-full p-0"
       >
         <div className="flex h-full flex-col">
           <SheetHeader className="border-b border-border/50 p-4">
             <SheetTitle className="text-popover-foreground">
-              {deal ? "Edit incident" : "New incident"}
+              {deal?.request_id ? `Incident #${deal.request_id}` : "New incident"}
             </SheetTitle>
           </SheetHeader>
 
@@ -276,12 +275,13 @@ export function DealForm({
               />
             </div>
 
-            {deal?.request_id && <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm"><span className="text-muted-foreground">Request ID </span><span className="font-semibold text-primary">{deal.request_id}</span></div>}
+            {deal?.request_id && <div className="flex flex-wrap gap-2"><span className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary">{deal.request_id}</span><span className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-700 dark:text-red-300">{priority.toUpperCase()}</span><span className="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground">{caseStatus.replaceAll("_", " ").toUpperCase()}</span></div>}
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2"><Label className="text-muted-foreground">Service</Label><select value={category} onChange={(e) => setCategory(e.target.value as IncidentCategory)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="rescue">Rescue</option><option value="food_water">Food / Water</option><option value="medicine">Medicine</option><option value="shelter">Shelter</option><option value="missing_person">Missing person</option><option value="information">Information</option></select></div>
               <div className="grid gap-2"><Label className="text-muted-foreground">Priority</Label><select value={priority} onChange={(e) => setPriority(e.target.value as IncidentPriority)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
             </div>
-            <div className="grid grid-cols-2 gap-3"><div className="grid gap-2"><Label className="text-muted-foreground">Location</Label><Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Municipality, ward" className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">Landmark</Label><Input value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Nearby landmark" className="border-border bg-muted text-foreground" /></div></div>
+            <div className="grid grid-cols-2 gap-3"><div className="grid gap-2"><Label className="text-muted-foreground">Exact location</Label><Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Ward, locality, or address" className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">Landmark</Label><Input value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="Nearby landmark" className="border-border bg-muted text-foreground" /></div></div>
+            <div className="grid grid-cols-2 gap-3"><div className="grid gap-2"><Label className="text-muted-foreground">Municipality</Label><Input value={municipality} onChange={(e) => setMunicipality(e.target.value)} placeholder="Optional" className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">District</Label><Input value={district} onChange={(e) => setDistrict(e.target.value)} placeholder="Optional" className="border-border bg-muted text-foreground" /></div></div>
             <div className="grid grid-cols-3 gap-3"><div className="grid gap-2"><Label className="text-muted-foreground">Latitude</Label><Input type="number" step="any" value={latitude} onChange={(e) => setLatitude(e.target.value)} className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">Longitude</Label><Input type="number" step="any" value={longitude} onChange={(e) => setLongitude(e.target.value)} className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">People affected</Label><Input type="number" min="1" value={peopleAffected} onChange={(e) => setPeopleAffected(e.target.value)} className="border-border bg-muted text-foreground" /></div></div>
 
             <div className="grid gap-2">
@@ -309,16 +309,8 @@ export function DealForm({
                 </Link>
               )}
             </div>
-            <ResourceRecommendations
-              latitude={latitude ? Number(latitude) : null}
-              longitude={longitude ? Number(longitude) : null}
-              onChooseTeam={setAssignedTeam}
-              onChooseVehicle={setAssignedResource}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-2"><Label className="text-muted-foreground">Assigned team</Label><select value={assignedTeam} onChange={(e) => setAssignedTeam(e.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="">No team assigned</option>{teams.filter((team) => team.availability === "available" || team.availability === "limited" || team.name === assignedTeam).map((team) => <option key={team.id} value={team.name}>{team.name} ({team.availability})</option>)}</select></div>
-              <div className="grid gap-2"><Label className="text-muted-foreground">Assigned vehicle / resource</Label><select value={assignedResource} onChange={(e) => setAssignedResource(e.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="">No vehicle assigned</option>{vehicles.filter((vehicle) => vehicle.availability === "available" || vehicle.availability === "limited" || vehicle.identifier === assignedResource).map((vehicle) => <option key={vehicle.id} value={vehicle.identifier}>{vehicle.vehicle_type} — {vehicle.identifier} ({vehicle.availability})</option>)}</select></div>
-            </div>
+            {deal ? <ResourceRecommendations deal={deal} onConfirmed={() => { setCaseStatus("assigned"); onSaved(); }} /> : <section className="rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground">Create the incident first, then a coordinator can review compatible nearby resources and confirm an assignment.</section>}
+            {deal && <IncidentFollowUp dealId={deal.id} />}
 
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Response status</Label>
@@ -334,6 +326,8 @@ export function DealForm({
                 ))}
               </select>
             </div>
+
+            {deal && <IncidentWorkflow current={caseStatus} />}
 
             <div className="grid gap-2">
               <Label className="text-muted-foreground">Coordinator</Label>
@@ -361,9 +355,10 @@ export function DealForm({
               />
             </div>
 
+            {deal && <IncidentTimeline dealId={deal.id} />}
             {deal && <IncidentNotes dealId={deal.id} />}
 
-            {deal && <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">Move the request on the board to change its status. Verification, assignment, and dispatch remain human coordinator decisions.</div>}
+            {deal && <div className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">Recommendation is not assignment. Assignment is not dispatch. Move the request on the board only when a coordinator has completed the corresponding operational decision.</div>}
           </div>
 
           <div className="border-t border-border/50 bg-popover/80 p-4">
@@ -422,4 +417,10 @@ export function DealForm({
       </SheetContent>
     </Sheet>
   );
+}
+
+function IncidentWorkflow({ current }: { current: Deal["incident_status"] }) {
+  const steps: Deal["incident_status"][] = ["received", "verified", "assigned", "dispatched", "in_progress", "resolved"];
+  const currentIndex = steps.indexOf(current);
+  return <section className="rounded-xl border border-border bg-card p-3"><h3 className="text-sm font-semibold text-foreground">Response workflow</h3><ol className="mt-3 grid gap-2 sm:grid-cols-3">{steps.map((step, index) => <li key={step} className={`rounded-lg px-2 py-1.5 text-xs font-medium ${index <= currentIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{index < currentIndex ? "✓ " : index === currentIndex ? "• " : "○ "}{step.replaceAll("_", " ").toUpperCase()}</li>)}</ol></section>;
 }
