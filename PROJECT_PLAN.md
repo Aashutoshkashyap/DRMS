@@ -246,6 +246,14 @@ If the intended work is instead a migration to a different stack, database, host
 - Replace the build-time external Google-font dependency with a production-safe English/Devanagari system font stack. Database enums and citizen text remain unchanged; citizen content is never translated or rewritten.
 - Record the evidence-bound final acceptance state in [`docs/final-acceptance.md`](docs/final-acceptance.md). A complete, user-persisted Nepali UI catalog and authenticated controlled-device/provider tests remain explicitly unverified rather than being represented as complete.
 
+### Explicit emergency entry triggers
+
+**Status:** Implemented locally; no migration required.
+
+- Accept only a compact explicit English, Nepali Unicode, and Romanized Nepali trigger set, after trimming simple surrounding punctuation. Ordinary message content never starts intake automatically.
+- Use one bilingual opening instruction, keep active-session/idempotency behavior intact, create a new independent incident only after a completed request receives a later explicit trigger, and preserve the original citizen request text.
+- Record a conservative `ne`/`en`/`mixed`/`unknown` script characteristic in the existing communication-session data without translation or rewriting.
+
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |
 | `npm run lint` | Passed | 0 errors; 35 inherited warnings remain outside this milestone. |

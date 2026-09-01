@@ -1,4 +1,5 @@
 import type { IncidentCategory, IncidentPriority } from "@/types";
+import { isExplicitEmergencyTrigger } from "./emergency-entry";
 
 export type IntakeState =
   | "start" | "collect_name" | "collect_location" | "collect_people"
@@ -192,7 +193,7 @@ function continueToNext(data: IntakeData): IntakeTransition {
   const complete = completedData(data); const state = nextMissingState(complete);
   return { state, data: complete, prompt: promptForState(state, complete), action: null };
 }
-function isStartCommand(value: string): boolean { return ["start", "help", "/start", "emergency"].includes(value.trim().toLowerCase()); }
+function isStartCommand(value: string): boolean { return isExplicitEmergencyTrigger(value); }
 function selectedPeople(value: string): number | null | undefined {
   return ({ "emergency:people:1": 1, "emergency:people:2_5": null, "emergency:people:6_10": null, "emergency:people:10_plus": null } as Record<string, number | null>)[value];
 }

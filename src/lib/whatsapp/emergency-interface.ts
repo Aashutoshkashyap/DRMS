@@ -7,6 +7,7 @@ import {
   findPossibleRelatedIncidents,
   type IncidentRequestSummary,
 } from "@/lib/incidents/request-service";
+import { BILINGUAL_EMERGENCY_OPENING, classifyCitizenLanguage, isExplicitEmergencyTrigger } from "@/lib/incidents/emergency-entry";
 import { sendMessageToConversation } from "./send-message";
 
 type SessionRow = {
@@ -65,8 +66,9 @@ async function saveSession(
   session: SessionRow | null,
   state: string,
   activeRequestId?: string | null,
+  collectedData?: Record<string, unknown>,
 ) {
-  const payload = { state, last_inbound_message_id: input.inboundMessageId, ...(activeRequestId === undefined ? {} : { active_request_id: activeRequestId }) };
+  const payload = { state, last_inbound_message_id: input.inboundMessageId, ...(activeRequestId === undefined ? {} : { active_request_id: activeRequestId }), ...(collectedData === undefined ? {} : { collected_data: collectedData }) };
   if (session) {
     const { error } = await db.from("communication_sessions").update(payload).eq("id", session.id);
     if (error) throw new Error(`Could not save emergency session: ${error.message}`);
@@ -80,9 +82,10 @@ async function saveSession(
  * idempotency happen before this adapter, so unmatched messages remain in the
  * shared inbox and a webhook replay cannot create a second request. */
 export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInbound): Promise<{ consumed: boolean }> {
-  const text = normalized(input.input.text);
+  const originalText = input.input.text ?? "";
+  const text = normalized(originalText);
   const command = text.toUpperCase();
-  const isStart = ["START", "/START", "HELP", "/HELP"].includes(command);
+  const isStart = isExplicitEmergencyTrigger(text);
   const isStop = ["STOP", "/STOP"].includes(command);
   const isStatus = command === "STATUS" || /^STATUS\s+DR(?:MS)?-[A-Z0-9-]+$/i.test(text);
   const asksForId = ["REQUEST ID", "REQUEST_ID", "ID"].includes(command);
@@ -91,7 +94,7 @@ export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInb
 
   if (isStart) {
     await saveSession(input.db, input, session, "awaiting_request", null);
-    await sendReply(input.db, input.accountId, input.conversationId, "How can we help? Please describe your situation in one message.\n\nYou may also send a photo, voice message, or location.");
+    await sendReply(input.db, input.accountId, input.conversationId, BILINGUAL_EMERGENCY_OPENING);
     return { consumed: true };
   }
   if (isStop) {
@@ -120,11 +123,13 @@ export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInb
   const request = await createIncidentRequest(input.db, {
     accountId: input.accountId, userId: input.userId, contactId: input.contactId, conversationId: input.conversationId,
     requesterName: normalized(input.knownRequesterName) || "WhatsApp citizen", category: "information", location: locationText,
-    peopleAffected: 0, priority: "medium", description: text || `Information missing — ${input.inboundContentType ?? "media"} evidence received.`,
+    peopleAffected: 0, priority: "medium", description: originalText || `Information missing — ${input.inboundContentType ?? "media"} evidence received.`,
     latitude: location?.latitude ?? null, longitude: location?.longitude ?? null,
     sourceWhatsAppConfigId: input.sourceWhatsAppConfigId ?? null, sourceMessageId: input.inboundDatabaseMessageId ?? null,
   });
-  await saveSession(input.db, input, session, "waiting_for_coordinator", request.id);
+  await saveSession(input.db, input, session, "waiting_for_coordinator", request.id, {
+    ...(session?.collected_data ?? {}), language: classifyCitizenLanguage(originalText),
+  });
   const related = await findPossibleRelatedIncidents(input.db, input.accountId, request.id).catch(() => []);
   const relatedLine = related[0] ? "\n\nYour request may relate to an existing response in this area. We will continue to update you here." : "";
   await sendReply(input.db, input.accountId, input.conversationId, `Request received.\n\nRequest ID: ${request.request_id}\n\nOur response team will review your request. You will receive updates here.${relatedLine}`);
