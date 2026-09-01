@@ -6,7 +6,12 @@ describe("explicit emergency entry triggers", () => {
     expect(isExplicitEmergencyTrigger(value)).toBe(true);
   });
 
-  it.each(["help me", "flood", "water", "fire", "ambulance", "we need rescue now"])("does not treat ordinary content %s as an entry trigger", (value) => {
+  it.each([
+    "HELP ME", "flood", "water", "fire", "earthquake", "landslide", "ambulance", "hospital", "injured",
+    "पानी", "बाढी", "आगो", "भूकम्प", "पहिरो",
+    "URGENT", "SOS HELP", "NEED HELP", "बचाउनुहोस्", "बचाउ", "मद्दत गर्नुहोस्",
+    "bachaidinu", "bachau", "maddat garnuhos", "hrepl", "starrt", "resqu", "we need rescue now",
+  ])("does not treat ordinary, optional, or misspelled content %s as an entry trigger", (value) => {
     expect(isExplicitEmergencyTrigger(value)).toBe(false);
   });
 

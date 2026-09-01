@@ -45,18 +45,39 @@ describe("minimal WhatsApp emergency adapter", () => {
     await handleWhatsAppEmergencyInbound({ ...input, inboundMessageId: "m4", input: { text: "Second request" } });
     expect(mocks.createIncidentRequest).toHaveBeenCalledTimes(2);
   });
+  it("does not create a duplicate request when a trigger is repeated during active intake", async () => {
+    const input = base();
+    await handleWhatsAppEmergencyInbound({ ...input, inboundMessageId: "m1", input: { text: "START" } });
+    await handleWhatsAppEmergencyInbound({ ...input, inboundMessageId: "m2", input: { text: "SOS!" } });
+    expect(mocks.createIncidentRequest).not.toHaveBeenCalled();
+
+    await handleWhatsAppEmergencyInbound({ ...input, inboundMessageId: "m3", input: { text: "People need rescue near Ward 5" } });
+    expect(mocks.createIncidentRequest).toHaveBeenCalledTimes(1);
+  });
+  it("idempotently ignores a replayed inbound trigger event", async () => {
+    const input = base();
+    const event = { ...input, inboundMessageId: "same-message", input: { text: "START" } };
+    await handleWhatsAppEmergencyInbound(event);
+    await handleWhatsAppEmergencyInbound(event);
+    expect(mocks.createIncidentRequest).not.toHaveBeenCalled();
+    expect(mocks.sendMessageToConversation).toHaveBeenCalledTimes(1);
+  });
   it.each(["START", "start!", "HELP", "SOS!", "EMERGENCY", "RESCUE", "सहयोग", "मद्दत", "उद्धार", "आपतकाल", "आपतकालीन", "sahayog", "maddat", "uddhar", "apatkal", "apatkaal"])("starts the same bilingual intake for %s", async (trigger) => {
     const input = base();
     await handleWhatsAppEmergencyInbound({ ...input, inboundMessageId: `trigger-${trigger}`, input: { text: trigger } });
     expect(mocks.sendMessageToConversation).toHaveBeenCalledWith(input.db, "account-1", expect.objectContaining({ contentText: expect.stringContaining("राहत/उद्धार") }));
   });
-  it("preserves the original citizen text and records its language characteristic", async () => {
+  it.each([
+    "मेरो घरमा पानी पस्यो",
+    "mero ghar ma pani pasyo",
+    "Ward 5 मा rescue चाहियो",
+  ])("preserves the original citizen text for %s", async (requestText) => {
     const input = base();
     await handleWhatsAppEmergencyInbound({ ...input, inboundMessageId: "m1", input: { text: "START" } });
-    await handleWhatsAppEmergencyInbound({ ...input, inboundMessageId: "m2", input: { text: "Ward 5 मा rescue चाहियो" } });
-    expect(mocks.createIncidentRequest).toHaveBeenLastCalledWith(input.db, expect.objectContaining({ description: "Ward 5 मा rescue चाहियो" }));
+    await handleWhatsAppEmergencyInbound({ ...input, inboundMessageId: "m2", input: { text: requestText } });
+    expect(mocks.createIncidentRequest).toHaveBeenLastCalledWith(input.db, expect.objectContaining({ description: requestText }));
   });
-  it("keeps unmatched ordinary messages in the human/configured path", async () => {
-    expect(await handleWhatsAppEmergencyInbound({ ...base(), inboundMessageId: "ordinary", input: { text: "Hello there" } })).toEqual({ consumed: false });
+  it.each(["Hello there", "flood", "water", "fire", "earthquake", "landslide", "ambulance", "hospital", "injured", "पानी", "बाढी", "आगो", "भूकम्प", "पहिरो"])("keeps ordinary content %s in the human/configured path", async (text) => {
+    expect(await handleWhatsAppEmergencyInbound({ ...base(), inboundMessageId: `ordinary-${text}`, input: { text } })).toEqual({ consumed: false });
   });
 });
