@@ -27,7 +27,6 @@ describe("OpenWA inbound image handling", () => {
             uploaded.push({ bucket, path, type: options.contentType, upsert: options.upsert });
             return { error: null };
           },
-          getPublicUrl(path: string) { return { data: { publicUrl: `https://cdn.test/${bucket}/${path}` } }; },
         };
       },
     };
@@ -37,6 +36,6 @@ describe("OpenWA inbound image handling", () => {
     expect(uploaded).toHaveLength(1);
     expect(uploaded[0]).toMatchObject({ bucket: OPENWA_INBOUND_BUCKET, type: "image/jpeg", upsert: true });
     expect(uploaded[0].path).toMatch(/^account-account-1\/openwa-inbound\/openwa-[a-f0-9]{20}\.jpg$/);
-    expect(result).toContain("/chat-media/account-account-1/openwa-inbound/");
+    expect(result).toMatchObject({ path: expect.stringContaining("account-account-1/openwa-inbound/"), mimeType: "image/jpeg" });
   });
 });

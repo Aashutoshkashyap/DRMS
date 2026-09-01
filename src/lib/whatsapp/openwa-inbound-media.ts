@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 
 import { MEDIA_MAX_BYTES, buildMediaPath } from "@/lib/storage/upload-media";
 
-export const OPENWA_INBOUND_BUCKET = "chat-media";
+/** Dedicated private bucket for citizen incident evidence. */
+export const OPENWA_INBOUND_BUCKET = "drms-evidence";
 export const OPENWA_INBOUND_FOLDER = "openwa-inbound";
 
 const IMAGE_MIME_TYPES = new Set([
@@ -20,7 +21,6 @@ type OpenWaStorage = {
       body: Uint8Array | Buffer,
       options: { contentType: string; cacheControl: string; upsert: boolean },
     ): Promise<{ error: { message: string } | null }>;
-    getPublicUrl(path: string): { data: { publicUrl: string } };
   };
 };
 
@@ -114,13 +114,15 @@ function extensionForAudioMime(mimeType: string) {
   return "ogg";
 }
 
-/** Store a gateway-delivered image in the existing account-scoped CRM bucket. */
+/** Store a gateway-delivered image as private, account-scoped DRMS evidence. */
+export type StoredOpenWaEvidence = { path: string; mimeType: string };
+
 export async function storeOpenWaInboundImage(input: {
   storage: OpenWaStorage;
   accountId: string;
   messageId: string;
   image: OpenWaInboundImage;
-}): Promise<string | null> {
+}): Promise<StoredOpenWaEvidence | null> {
   const id = crypto.createHash("sha256").update(input.messageId).digest("hex").slice(0, 20);
   const path = buildMediaPath(
     input.accountId,
@@ -137,15 +139,13 @@ export async function storeOpenWaInboundImage(input: {
     console.warn("[openwa] inbound image storage failed:", error.message);
     return null;
   }
-  const { data } = input.storage.from(OPENWA_INBOUND_BUCKET).getPublicUrl(path);
-  return data.publicUrl || null;
+  return { path, mimeType: input.image.mimeType };
 }
 
-export async function storeOpenWaInboundAudio(input: { storage: OpenWaStorage; accountId: string; messageId: string; audio: OpenWaInboundAudio }): Promise<string | null> {
+export async function storeOpenWaInboundAudio(input: { storage: OpenWaStorage; accountId: string; messageId: string; audio: OpenWaInboundAudio }): Promise<StoredOpenWaEvidence | null> {
   const id = crypto.createHash("sha256").update(input.messageId).digest("hex").slice(0, 20);
   const path = buildMediaPath(input.accountId, `openwa-${id}.${extensionForAudioMime(input.audio.mimeType)}`, null, OPENWA_INBOUND_FOLDER);
   const { error } = await input.storage.from(OPENWA_INBOUND_BUCKET).upload(path, input.audio.bytes, { contentType: input.audio.mimeType, cacheControl: "3600", upsert: true });
   if (error) { console.warn("[openwa] inbound audio storage failed:", error.message); return null; }
-  const { data } = input.storage.from(OPENWA_INBOUND_BUCKET).getPublicUrl(path);
-  return data.publicUrl || null;
+  return { path, mimeType: input.audio.mimeType };
 }

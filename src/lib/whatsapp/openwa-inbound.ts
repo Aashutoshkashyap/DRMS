@@ -6,6 +6,7 @@ import { reopenClosedConversation } from '@/lib/conversations/reopen';
 import { dispatchInboundToFlows } from '@/lib/flows/engine';
 import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 import { handleWhatsAppEmergencyInbound } from '@/lib/whatsapp/emergency-interface';
+import { recordHealthFailure, recordHealthRecovery } from '@/lib/operations/health';
 import {
   decodeOpenWaInboundImage,
   decodeOpenWaInboundAudio,
@@ -146,10 +147,14 @@ export async function persistOpenWaInboundMessage(input: {
   const conversation = conversationOutcome.conversation;
 
   // The gateway provides image bytes as base64. Store those bytes in the
-  // same durable, account-scoped `chat-media` bucket the CRM already uses.
+  // dedicated private `drms-evidence` bucket rather than the legacy public
+  // chat-media bucket.
   // Crucially, never let the base64 string reach content_text: it is neither
   // useful to a coordinator nor a valid disaster-intake answer.
   let mediaUrl: string | null = null;
+  let mediaStoragePath: string | null = null;
+  let mediaStorageStatus: "none" | "stored" | "failed" = "none";
+  let mediaStorageError: string | null = null;
   let mediaType: string | null = null;
   let decodedImage: OpenWaInboundImage | null = null;
   let decodedAudio: ReturnType<typeof decodeOpenWaInboundAudio> = null;
@@ -157,19 +162,23 @@ export async function persistOpenWaInboundMessage(input: {
     decodedImage = decodeOpenWaInboundImage(input.image);
     if (decodedImage) {
       mediaType = decodedImage.mimeType;
-      mediaUrl = await storeOpenWaInboundImage({
+      const stored = await storeOpenWaInboundImage({
         storage: input.db.storage,
         accountId: input.accountId,
         messageId: input.messageId,
         image: decodedImage,
       });
+      if (stored) { mediaStoragePath = stored.path; mediaStorageStatus = "stored"; }
+      else { mediaStorageStatus = "failed"; mediaStorageError = "Evidence upload failed; the incident message was still recorded."; await recordHealthFailure(input.db, input.accountId, "storage", mediaStorageError); }
     }
   }
   if (input.contentType === 'audio' && input.audio) {
     decodedAudio = decodeOpenWaInboundAudio(input.audio);
     if (decodedAudio) {
       mediaType = decodedAudio.mimeType;
-      mediaUrl = await storeOpenWaInboundAudio({ storage: input.db.storage, accountId: input.accountId, messageId: input.messageId, audio: decodedAudio });
+      const stored = await storeOpenWaInboundAudio({ storage: input.db.storage, accountId: input.accountId, messageId: input.messageId, audio: decodedAudio });
+      if (stored) { mediaStoragePath = stored.path; mediaStorageStatus = "stored"; }
+      else { mediaStorageStatus = "failed"; mediaStorageError = "Evidence upload failed; the incident message was still recorded."; await recordHealthFailure(input.db, input.accountId, "storage", mediaStorageError); }
     }
   }
   const persistedText = input.contentType === 'image'
@@ -194,6 +203,9 @@ export async function persistOpenWaInboundMessage(input: {
         content_type: input.contentType,
         content_text: persistedText,
         media_url: mediaUrl,
+        media_storage_path: mediaStoragePath,
+        media_storage_status: mediaStorageStatus,
+        media_storage_error: mediaStorageError,
         media_type: mediaType,
         message_id: input.messageId,
         status: 'delivered',
@@ -205,6 +217,11 @@ export async function persistOpenWaInboundMessage(input: {
   if (messageError) throw new Error(`Could not store inbound message: ${messageError.message}`);
   if (!inserted?.length) return { duplicate: true, conversationId: conversation.id, contactId: contactOutcome.contact.id };
   const messageRecordId = inserted[0]?.id as string | undefined;
+  if (messageRecordId && mediaStoragePath) {
+    mediaUrl = `/api/evidence/${messageRecordId}`;
+    await input.db.from("messages").update({ media_url: mediaUrl }).eq("id", messageRecordId);
+    await recordHealthRecovery(input.db, input.accountId, "storage");
+  }
 
   if (conversationOutcome.created) {
     await dispatchWebhookEvent(input.db, input.accountId, 'conversation.created', {

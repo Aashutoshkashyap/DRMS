@@ -75,6 +75,20 @@ export async function createIncidentRequest(
       message_id: input.sourceMessageId,
     }, { onConflict: "deal_id,message_id", ignoreDuplicates: true });
     if (linkError) console.error("Could not link incident evidence:", linkError.message);
+    const { data: message, error: evidenceReadError } = await db.from("messages")
+      .select("media_storage_path,media_type,conversation_id").eq("id", input.sourceMessageId).maybeSingle();
+    if (evidenceReadError) console.error("Could not inspect incident evidence:", evidenceReadError.message);
+    if (message?.media_storage_path) {
+      const { error: evidenceError } = await db.from("incident_evidence").upsert({
+        account_id: input.accountId,
+        deal_id: request.id,
+        conversation_id: message.conversation_id,
+        message_id: input.sourceMessageId,
+        storage_path: message.media_storage_path,
+        media_type: message.media_type,
+      }, { onConflict: "deal_id,message_id", ignoreDuplicates: true });
+      if (evidenceError) console.error("Could not associate incident evidence:", evidenceError.message);
+    }
   }
   return request;
 }

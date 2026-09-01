@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(true);
   const [locationGrouping, setLocationGrouping] = useState<LocationGrouping>("exact");
+  const [health, setHealth] = useState<{ status: "unknown" | "degraded" | "incident"; alerts: Array<{ component: string; message: string; event_count: number }> } | null>(null);
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -28,10 +29,12 @@ export default function DashboardPage() {
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void fetch("/api/operations/health").then((response) => response.ok ? response.json() : null).then(setHealth).catch(() => setHealth(null)); }, []);
   const locationSummary = useMemo(() => groupIncidentsByLocation(overview?.active ?? [], locationGrouping), [locationGrouping, overview?.active]);
 
   return <div className="space-y-5">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-bold text-foreground">Operations Overview</h1><p className="mt-1 text-sm text-muted-foreground">Coordinator view of stored incidents, communications, resource data, and items needing attention.</p></div><div className="flex gap-2"><Link href="/pipelines" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">View incidents</Link><Link href="/resources" className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground">Resources & locations</Link></div></div>
+    {health && health.status !== "unknown" && <section className={`rounded-xl border p-3 text-sm ${health.status === "incident" ? "border-red-500/40 bg-red-500/10" : "border-amber-500/40 bg-amber-500/10"}`}><strong>SYSTEM {health.status === "incident" ? "INCIDENT" : "ALERT"}</strong>{health.alerts.slice(0, 2).map((alert) => <p key={`${alert.component}-${alert.message}`} className="mt-1">{alert.component}: {alert.message}{alert.event_count > 1 ? ` (${alert.event_count} repeated failures)` : ""}</p>)}</section>}
     <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">{loading || !overview ? Array.from({ length: 12 }).map((_, index) => <SkeletonCard key={index} />) : <>
       <DashboardMetric href="/pipelines"><MetricCard title="Active incidents" value={String(overview.counts.active)} icon={ClipboardList} /></DashboardMetric>
       <DashboardMetric href="/pipelines?priority=critical"><MetricCard title="Critical incidents" value={String(overview.counts.critical)} icon={AlertTriangle} /></DashboardMetric>

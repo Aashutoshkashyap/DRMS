@@ -8,6 +8,7 @@ import {
   verifyOpenWaWebhookSignature,
 } from '@/lib/whatsapp/openwa';
 import { persistOpenWaInboundMessage } from '@/lib/whatsapp/openwa-inbound';
+import { recordHealthFailure } from '@/lib/operations/health';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,6 +106,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, duplicate: result.duplicate });
   } catch (error) {
     console.error('[openwa] inbound persistence failed:', error);
+    await recordHealthFailure(db, config.account_id, 'webhook', 'Inbound WhatsApp processing failed after gateway receipt.');
     return NextResponse.json({ error: 'Could not persist inbound message' }, { status: 500 });
   }
 }

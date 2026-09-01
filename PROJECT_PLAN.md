@@ -221,6 +221,15 @@ If the intended work is instead a migration to a different stack, database, host
 - Preserve originating WhatsApp configuration per conversation/request, add safe OpenWA session registry records, durable evidence links, coordinator notifications, related-report review records, and active-vs-resolved board separation.
 - Keep the account/team as the operational owner; existing invitations, role/RLS, lifecycle timeline, status outbox, resource confirmation, and conversation infrastructure are reused without AI, SMS, or automatic dispatch.
 
+### Phase X — Private evidence and operational resilience
+
+**Status:** Implemented; migrations `051_private_incident_evidence_and_health.sql` and `052_operational_health_agent_write.sql` are applied to the linked Supabase project.
+
+- Store new OpenWA image/audio evidence in the private, account-scoped `drms-evidence` bucket. The legacy public `chat-media` bucket remains untouched for backwards-compatible provider media, and is not the canonical DRMS evidence store.
+- Associate stored evidence with its CRM message, conversation, incident, account, media type, and timestamp. Coordinators open evidence through an authenticated route that creates a short-lived signed URL; no storage path is accepted from the browser.
+- Preserve the citizen message and incident path if storage fails, while recording grouped, recoverable storage/webhook/outbound operational alerts for coordinators. The dashboard reports only observed degraded/incident signals and never declares green health from a page load.
+- Keep existing idempotency, deterministic intake, human assignment/dispatch control, WhatsApp transport, and SMS scope unchanged.
+
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |
 | `npm run lint` | Passed | 0 errors; 35 inherited warnings remain outside this milestone. |

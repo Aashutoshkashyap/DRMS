@@ -31,6 +31,7 @@ import { IncidentNotes } from "@/components/incidents/incident-notes";
 import { ResourceRecommendations } from "@/components/incidents/resource-recommendations";
 import { IncidentTimeline } from "@/components/incidents/incident-timeline";
 import { IncidentRelatedReports } from "@/components/incidents/incident-related-reports";
+import { IncidentEvidence } from "@/components/incidents/incident-evidence";
 import { IncidentFollowUp } from "@/components/incidents/incident-follow-up";
 
 interface DealFormProps {
@@ -385,6 +386,7 @@ export function DealForm({
             </div>
 
             {deal && <IncidentRelatedReports dealId={deal.id} />}
+            {deal && <IncidentEvidence dealId={deal.id} />}
             {deal && <IncidentTimeline dealId={deal.id} />}
             {deal && <IncidentNotes dealId={deal.id} />}
 

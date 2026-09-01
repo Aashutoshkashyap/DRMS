@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IncidentStatus } from "@/types";
 import { sendMessageToConversation } from "@/lib/whatsapp/send-message";
+import { recordHealthFailure, recordHealthRecovery } from "@/lib/operations/health";
 
 type IncidentRow = {
   id: string;
@@ -96,10 +97,12 @@ export async function deliverIncidentStatusUpdate(
       error_message: null,
     }).eq("id", delivery.id);
     if (error) throw new Error(`Could not record status delivery: ${error.message}`);
+    await recordHealthRecovery(db, accountId, "outbound");
     return { delivered: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown WhatsApp delivery failure";
     await db.from("incident_status_deliveries").update({ delivery_status: "failed", error_message: message }).eq("id", delivery.id);
+    await recordHealthFailure(db, accountId, "outbound", "WhatsApp status delivery failed");
     throw error;
   }
 }
