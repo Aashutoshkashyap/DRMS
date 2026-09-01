@@ -32,13 +32,14 @@ export default function DashboardPage() {
 
   return <div className="space-y-5">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><h1 className="text-2xl font-bold text-foreground">Operations Overview</h1><p className="mt-1 text-sm text-muted-foreground">Coordinator view of stored incidents, communications, resource data, and items needing attention.</p></div><div className="flex gap-2"><Link href="/pipelines" className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">View incidents</Link><Link href="/resources" className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground">Resources & locations</Link></div></div>
-    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">{loading || !overview ? Array.from({ length: 11 }).map((_, index) => <SkeletonCard key={index} />) : <>
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">{loading || !overview ? Array.from({ length: 12 }).map((_, index) => <SkeletonCard key={index} />) : <>
       <DashboardMetric href="/pipelines"><MetricCard title="Active incidents" value={String(overview.counts.active)} icon={ClipboardList} /></DashboardMetric>
       <DashboardMetric href="/pipelines?priority=critical"><MetricCard title="Critical incidents" value={String(overview.counts.critical)} icon={AlertTriangle} /></DashboardMetric>
       <DashboardMetric href="/pipelines?status=received"><MetricCard title="New requests" value={String(overview.counts.received)} icon={CircleAlert} /></DashboardMetric>
       <DashboardMetric href="/pipelines?status=verified"><MetricCard title="Verified" value={String(overview.counts.verified)} icon={UserRoundCheck} /></DashboardMetric>
       <DashboardMetric href="/pipelines?status=assigned"><MetricCard title="Assigned" value={String(overview.counts.assigned)} icon={ClipboardList} /></DashboardMetric>
       <DashboardMetric href="/follow-up?filter=unassigned"><MetricCard title="Unassigned" value={String(overview.counts.unassigned)} icon={UserRoundCheck} /></DashboardMetric>
+      <DashboardMetric href="/follow-up?filter=communication_failed"><MetricCard title="Communication failed" value={String(overview.counts.communicationFollowUp)} icon={MessageSquare} /></DashboardMetric>
       <DashboardMetric href="/pipelines?status=dispatched"><MetricCard title="Dispatched" value={String(overview.counts.dispatched)} icon={Send} /></DashboardMetric>
       <DashboardMetric href="/pipelines?status=in_progress"><MetricCard title="In progress" value={String(overview.counts.inProgress)} icon={Radio} /></DashboardMetric>
       <DashboardMetric href="/pipelines?status=resolved"><MetricCard title="Resolved" value={String(overview.counts.resolved)} icon={CheckCircle2} /></DashboardMetric>

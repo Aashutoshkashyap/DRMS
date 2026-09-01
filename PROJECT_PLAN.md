@@ -201,6 +201,7 @@ If the intended work is instead a migration to a different stack, database, host
 - Keep resource suggestions explicitly non-authoritative: only a coordinator can confirm an assignment, assignment never dispatches, and stored availability is not presented as live tracking.
 - Remove inherited AI drafting and auto-reply controls from the primary inbox surface. The retained emergency intake, Flow, and explicitly configured automation paths are deterministic; no WhatsApp transport, inbound webhook, or provider configuration changes are made.
 - Keep coordinator-only notes clearly separate from citizen communication and make incident context visible in the inbox contact panel. The demo data remains fictional and isolated to the explicitly flagged `DEMO DATA` account.
+- Add the final acceptance-facing dashboard communication-failure action, case identity summary, operations-first navigation ordering, and [`docs/acceptance-testing.md`](docs/acceptance-testing.md). This runbook distinguishes CRM state from provider-confirmed delivery and preserves the official-data adapter boundary.
 
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |

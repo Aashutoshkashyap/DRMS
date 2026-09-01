@@ -79,6 +79,9 @@ export function DealForm({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const selectedContact = contacts.find((contact) => contact.id === contactId);
+  const citizenName = selectedContact?.name || deal?.contact?.name || deal?.requester_name || title || "Not recorded";
+  const citizenPhone = selectedContact?.phone || deal?.contact?.phone || "Not recorded";
 
   // Reset the form fields every time the sheet opens or its input
   // props change. This is a legitimate prop-driven sync; the rule is
@@ -275,7 +278,7 @@ export function DealForm({
               />
             </div>
 
-            {deal?.request_id && <div className="flex flex-wrap gap-2"><span className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary">{deal.request_id}</span><span className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-700 dark:text-red-300">{priority.toUpperCase()}</span><span className="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground">{caseStatus.replaceAll("_", " ").toUpperCase()}</span></div>}
+            {deal?.request_id && <><div className="flex flex-wrap gap-2"><span className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm font-semibold text-primary">{deal.request_id}</span><span className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-medium text-red-700 dark:text-red-300">{priority.toUpperCase()}</span><span className="rounded-lg bg-muted px-3 py-2 text-sm font-medium text-foreground">{caseStatus.replaceAll("_", " ").toUpperCase()}</span></div><section className="grid gap-2 rounded-xl border border-border bg-card p-3 text-sm sm:grid-cols-2"><CaseSummary label="Citizen / requester" value={citizenName} /><CaseSummary label="Contact" value={citizenPhone} /><CaseSummary label="Created" value={new Date(deal.created_at).toLocaleString()} /><CaseSummary label="Recorded location" value={[deal.location, deal.municipality, deal.district].filter(Boolean).join(" · ") || "Not recorded"} /></section></>}
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-2"><Label className="text-muted-foreground">Service</Label><select value={category} onChange={(e) => setCategory(e.target.value as IncidentCategory)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="rescue">Rescue</option><option value="food_water">Food / Water</option><option value="medicine">Medicine</option><option value="shelter">Shelter</option><option value="missing_person">Missing person</option><option value="information">Information</option></select></div>
               <div className="grid gap-2"><Label className="text-muted-foreground">Priority</Label><select value={priority} onChange={(e) => setPriority(e.target.value as IncidentPriority)} className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground"><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
@@ -285,13 +288,13 @@ export function DealForm({
             <div className="grid grid-cols-3 gap-3"><div className="grid gap-2"><Label className="text-muted-foreground">Latitude</Label><Input type="number" step="any" value={latitude} onChange={(e) => setLatitude(e.target.value)} className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">Longitude</Label><Input type="number" step="any" value={longitude} onChange={(e) => setLongitude(e.target.value)} className="border-border bg-muted text-foreground" /></div><div className="grid gap-2"><Label className="text-muted-foreground">People affected</Label><Input type="number" min="1" value={peopleAffected} onChange={(e) => setPeopleAffected(e.target.value)} className="border-border bg-muted text-foreground" /></div></div>
 
             <div className="grid gap-2">
-              <Label className="text-muted-foreground">{t("contact")}</Label>
+              <Label className="text-muted-foreground">Citizen / requester</Label>
               <select
                 value={contactId}
                 onChange={(e) => setContactId(e.target.value)}
                 className="h-9 w-full rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               >
-                <option value="">{t("selectContact")}</option>
+                <option value="">Select citizen / requester</option>
                 {contacts.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name || c.phone}
@@ -305,9 +308,10 @@ export function DealForm({
                   className="mt-1 inline-flex items-center gap-1.5 self-start rounded-md bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary/20"
                 >
                   <MessageSquare className="h-3 w-3" />
-                  Open communication history
+                  Open citizen communication
                 </Link>
               )}
+              {deal && <p className="text-xs text-muted-foreground">Citizen status notices are recorded in the activity timeline as queued, sent, or failed. Sent means provider acceptance, not confirmed handset delivery.</p>}
             </div>
             {deal ? <ResourceRecommendations deal={deal} onConfirmed={() => { setCaseStatus("assigned"); onSaved(); }} /> : <section className="rounded-xl border border-dashed border-border p-3 text-sm text-muted-foreground">Create the incident first, then a coordinator can review compatible nearby resources and confirm an assignment.</section>}
             {deal && <IncidentFollowUp dealId={deal.id} />}
@@ -423,4 +427,8 @@ function IncidentWorkflow({ current }: { current: Deal["incident_status"] }) {
   const steps: Deal["incident_status"][] = ["received", "verified", "assigned", "dispatched", "in_progress", "resolved"];
   const currentIndex = steps.indexOf(current);
   return <section className="rounded-xl border border-border bg-card p-3"><h3 className="text-sm font-semibold text-foreground">Response workflow</h3><ol className="mt-3 grid gap-2 sm:grid-cols-3">{steps.map((step, index) => <li key={step} className={`rounded-lg px-2 py-1.5 text-xs font-medium ${index <= currentIndex ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{index < currentIndex ? "✓ " : index === currentIndex ? "• " : "○ "}{step.replaceAll("_", " ").toUpperCase()}</li>)}</ol></section>;
+}
+
+function CaseSummary({ label, value }: { label: string; value: string }) {
+  return <div><p className="text-xs text-muted-foreground">{label}</p><p className="mt-0.5 break-words font-medium text-foreground">{value}</p></div>;
 }
