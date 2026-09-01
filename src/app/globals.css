@@ -88,6 +88,9 @@
 
 :root,
 html[data-mode="dark"] {
+  /* System-first stack keeps English and Devanagari readable without a
+     build-time dependency on an external font host. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans Devanagari", "Nirmala UI", "Mangal", sans-serif;
   --background: oklch(0.13 0.01 260);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.18 0.01 260);
@@ -117,6 +120,7 @@ html[data-mode="dark"] {
 }
 
 html[data-mode="light"] {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans Devanagari", "Nirmala UI", "Mangal", sans-serif;
   --background: oklch(0.99 0.002 260);
   --foreground: oklch(0.21 0.01 260);
   --card: oklch(1 0 0);

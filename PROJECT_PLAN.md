@@ -238,6 +238,14 @@ If the intended work is instead a migration to a different stack, database, host
 - Make storage failures visible in the incident evidence panel without losing the message/request, make dashboard data failure explicit, and label WhatsApp transport acceptance separately from delivery confirmation.
 - Keep the existing idempotent OpenWA retry, failed-notification follow-up, explicit coordinator retry, account-access warning, and manual recovery paths. [`docs/failure-fallback.md`](docs/failure-fallback.md) documents the operational matrix without adding a separate recovery platform.
 
+### Final prototype consolidation
+
+**Status:** Consolidated locally; release validation is required after this update.
+
+- Lock the primary operational surface to Operations, Incidents, Citizen Communications, Follow-up, team membership, and Settings. Inherited CRM, AI, flow, broadcast, and resource-management infrastructure remains outside the primary navigation and is not part of the DRMS operating workflow.
+- Replace the build-time external Google-font dependency with a production-safe English/Devanagari system font stack. Database enums and citizen text remain unchanged; citizen content is never translated or rewritten.
+- Record the evidence-bound final acceptance state in [`docs/final-acceptance.md`](docs/final-acceptance.md). A complete, user-persisted Nepali UI catalog and authenticated controlled-device/provider tests remain explicitly unverified rather than being represented as complete.
+
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |
 | `npm run lint` | Passed | 0 errors; 35 inherited warnings remain outside this milestone. |
