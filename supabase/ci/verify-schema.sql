@@ -70,6 +70,19 @@ BEGIN
     RAISE EXCEPTION 'incident assignment accountability RPC is missing — migration 049 did not apply';
   END IF;
 
+  -- Phase 13B keeps account RLS as the tenancy boundary while adding a
+  -- normalized link between response teams and workspace members.
+  IF to_regclass('public.response_team_members') IS NULL THEN
+    RAISE EXCEPTION 'public.response_team_members is missing — migration 053 did not apply';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'incident_activity'
+      AND column_name = 'actor_team_id'
+  ) THEN
+    RAISE EXCEPTION 'incident_activity.actor_team_id is missing — migration 053 did not apply';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;

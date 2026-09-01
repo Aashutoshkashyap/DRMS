@@ -20,6 +20,7 @@ import {
   Users,
   UsersRound,
   ListChecks,
+  History,
   X,
 } from "lucide-react";
 import type { AccountRole } from "@/lib/auth/roles";
@@ -90,7 +91,8 @@ const navItems: NavItem[] = [
   { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },
   { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
   { href: "/follow-up", labelKey: "followUp", icon: ListChecks },
-  { href: "/settings?tab=members", labelKey: "team", icon: Users },
+  { href: "/activity", labelKey: "activity", icon: History },
+  { href: "/teams", labelKey: "team", icon: Users },
 ];
 
 const bottomNavItems = [

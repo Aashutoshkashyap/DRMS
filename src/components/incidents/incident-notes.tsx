@@ -10,11 +10,12 @@ import { toast } from "sonner";
 
 export function IncidentNotes({ dealId }: { dealId: string }) {
   const db = createClient();
-  const { accountId, user } = useAuth();
+  const { accountId, user, canSendMessages } = useAuth();
   const [notes, setNotes] = useState<IncidentNote[]>([]);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [authors, setAuthors] = useState(new Map<string, { name: string; email: string | null }>());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -24,7 +25,15 @@ export function IncidentNotes({ dealId }: { dealId: string }) {
       .eq("deal_id", dealId)
       .order("created_at", { ascending: false });
     if (error) toast.error("Could not load case notes.");
-    else setNotes((data ?? []) as IncidentNote[]);
+    else {
+      const loadedNotes = (data ?? []) as IncidentNote[];
+      setNotes(loadedNotes);
+      const authorIds = [...new Set(loadedNotes.map((note) => note.user_id))];
+      if (authorIds.length) {
+        const { data: profiles } = await db.from("profiles").select("user_id,full_name,email").in("user_id", authorIds);
+        setAuthors(new Map((profiles ?? []).map((profile) => [profile.user_id, { name: profile.full_name || "Coordinator", email: profile.email || null }])));
+      } else setAuthors(new Map());
+    }
     setLoading(false);
   }, [db, dealId]);
 
@@ -63,9 +72,10 @@ export function IncidentNotes({ dealId }: { dealId: string }) {
         value={text}
         onChange={(event) => setText(event.target.value)}
         placeholder="Add a verified observation, handover, or coordinator decision"
+        disabled={!canSendMessages}
         className="min-h-20 border-border bg-muted text-foreground"
       />
-      <Button type="button" size="sm" onClick={addNote} disabled={saving || !text.trim()}>
+      <Button type="button" size="sm" onClick={addNote} disabled={!canSendMessages || saving || !text.trim()}>
         {saving ? "Saving…" : "Add case note"}
       </Button>
       {loading ? (
@@ -77,7 +87,7 @@ export function IncidentNotes({ dealId }: { dealId: string }) {
           {notes.map((note) => (
             <li key={note.id} className="rounded-lg bg-muted/60 p-2 text-sm text-foreground">
               <p>{note.note_text}</p>
-              <p className="mt-1 text-xs text-muted-foreground">Coordinator · {new Date(note.created_at).toLocaleString()}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Internal / coordinator only · {authors.get(note.user_id)?.name || "Coordinator"}{authors.get(note.user_id)?.email ? ` · ${authors.get(note.user_id)?.email}` : ""} · {new Date(note.created_at).toLocaleString()}</p>
             </li>
           ))}
         </ul>

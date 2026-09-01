@@ -216,7 +216,7 @@ If the intended work is instead a migration to a different stack, database, host
 
 **Status:** Implemented locally; migration `050_whatsapp_first_operations.sql` and the manual Supabase Auth configuration in [`docs/phase12-configuration.md`](docs/phase12-configuration.md) must be applied before release.
 
-- Replace the long deterministic intake questionnaire with `START`/`HELP` followed by one message, media, or a location pin; preserve unmatched messages for human/configured deterministic handling.
+- Replace the long deterministic intake questionnaire with `START`/`HELP`, followed by a citizen request/evidence message and then an explicit location step; preserve unmatched messages for human/configured deterministic handling.
 - Add a PKCE `/auth/callback`, internal-only redirect validation, reset-password destination, and DRMS metadata. Production redirect/email sender settings remain Supabase dashboard work.
 - Preserve originating WhatsApp configuration per conversation/request, add safe OpenWA session registry records, durable evidence links, coordinator notifications, related-report review records, and active-vs-resolved board separation.
 - Keep the account/team as the operational owner; existing invitations, role/RLS, lifecycle timeline, status outbox, resource confirmation, and conversation infrastructure are reused without AI, SMS, or automatic dispatch.
@@ -253,6 +253,26 @@ If the intended work is instead a migration to a different stack, database, host
 - Accept only a compact explicit English, Nepali Unicode, and Romanized Nepali trigger set, after trimming simple surrounding punctuation. Ordinary message content never starts intake automatically.
 - Use one bilingual opening instruction, keep active-session/idempotency behavior intact, create a new independent incident only after a completed request receives a later explicit trigger, and preserve the original citizen request text.
 - Record a conservative `ne`/`en`/`mixed`/`unknown` script characteristic in the existing communication-session data without translation or rewriting.
+
+### Two-step citizen intake and administrator directory
+
+**Status:** Implemented locally; no migration or transport change required.
+
+- After an approved emergency trigger, first collect the citizen's written request or photo/voice evidence. Preserve its original text, persisted CRM-message link, source WhatsApp configuration, requester identity, and language characteristic in the existing `communication_sessions` record.
+- Then request a WhatsApp map pin, locality/landmark, or Google Maps link. Create the incident and its Request ID only after that location step. A location sent before a request does not create an incident.
+- Add a dashboard “Available administrators” card with live member presence. It lists owner/admin name, role, and email only to authenticated members of the same account; it is not a citizen-facing or public directory.
+- Move test-only parser exports out of two API route modules so the current Next.js route contract validates during a production build; operational behavior of those routes is unchanged.
+
+### Phase 13B — Shared coordination, accountability and navigation
+
+**Status:** Implemented and migration `053_shared_coordination_workspaces.sql` is applied to the linked Supabase project; release deployment is pending.
+
+- Preserve `accounts`, `profiles.account_id/account_role`, account invitations, the existing incident/deal model, the existing `incident_activity` stream, and all account-scoped RLS policies. Authorized members of one workspace continue to share the same incident, contact, conversation, evidence, assignment, follow-up, resource and archive data; unrelated users remain isolated.
+- Correct the invitation journey so Sign up and Sign in from `/join/<token>` retain the token through authentication and email confirmation, returning the new user to the explicit invitation acceptance step instead of silently leaving them in a separate personal workspace.
+- Add one normalized `response_team_members` table connecting existing response teams to existing workspace members. It is not an authentication or data-ownership table. RLS permits every workspace member to read the team directory and only admins to change memberships.
+- Extend the existing append-only `incident_activity` record with optional `actor_team_id`. A database validation trigger derives the actor’s relevant current team where deterministic, validates actor/team/account consistency, and leaves historic/system/unassigned actions explicitly marked rather than fabricating a team.
+- Add shared `/activity` and `/teams` workspace views. Activity is a filterable account-scoped audit surface over the same incident timeline records; Teams is the workspace directory and membership manager. Internal incident notes remain separate from citizen WhatsApp messages and are never routed through the citizen transport.
+- Keep the primary navigation DRMS-focused: Operations, Incidents, Citizen Communications, Follow-up, Activity & Accountability, Teams, and Settings. Resource management remains incident-accessible rather than a primary CRM-style module.
 
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |

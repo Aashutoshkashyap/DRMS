@@ -259,7 +259,7 @@ export default function JoinPage() {
               >
                 Try again
               </Button>
-              <Link href="/signup">
+              <Link href={`/signup?invite=${encodeURIComponent(token)}`}>
                 <Button
                   variant="outline"
                   className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -270,12 +270,12 @@ export default function JoinPage() {
             </>
           ) : (
             <>
-              <Link href="/signup">
+              <Link href={`/signup?invite=${encodeURIComponent(token)}`}>
                 <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                   Create a new account instead
                 </Button>
               </Link>
-              <Link href="/login">
+              <Link href={`/login?invite=${encodeURIComponent(token)}`}>
                 <Button
                   variant="outline"
                   className="w-full border-border text-muted-foreground hover:bg-muted hover:text-foreground"

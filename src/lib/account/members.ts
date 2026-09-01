@@ -1,8 +1,8 @@
 import type { AccountMember } from '@/types';
 
 /**
- * Fetch the current account's members from the API (which applies the
- * email-visibility rules — agents/viewers don't see emails). Best-effort:
+ * Fetch the current account's members from the account-scoped operational
+ * directory. It includes colleague contact details. Best-effort:
  * returns `[]` on any error or on an older deployment without the
  * endpoint, so callers can fall back to a queue-only / raw-id picker.
  *

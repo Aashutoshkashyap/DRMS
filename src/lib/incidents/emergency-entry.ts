@@ -38,5 +38,11 @@ export const BILINGUAL_EMERGENCY_OPENING = `राहत/उद्धार आ�
 Need emergency relief or rescue?
 Simply describe your request.
 
-तपाईं text, photo, voice message वा location पठाउन सक्नुहुन्छ।
-You can send text, a photo, voice message, or location.`;
+तपाईं photo वा voice message पनि पठाउन सक्नुहुन्छ।
+You can also send a photo or voice message.`;
+
+export const BILINGUAL_LOCATION_PROMPT = `धन्यवाद। अब सहायता चाहिएको स्थान पठाउनुहोस्।
+Map pin पठाउनुहोस्, वा ठाउँ/landmark अथवा Google Maps link लेख्नुहोस्।
+
+Thank you. Now send the location where help is needed.
+Share a map pin, or reply with a place/landmark or Google Maps link.`;

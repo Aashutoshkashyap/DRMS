@@ -7,7 +7,7 @@ import {
   findPossibleRelatedIncidents,
   type IncidentRequestSummary,
 } from "@/lib/incidents/request-service";
-import { BILINGUAL_EMERGENCY_OPENING, classifyCitizenLanguage, isExplicitEmergencyTrigger } from "@/lib/incidents/emergency-entry";
+import { BILINGUAL_EMERGENCY_OPENING, BILINGUAL_LOCATION_PROMPT, classifyCitizenLanguage, isExplicitEmergencyTrigger } from "@/lib/incidents/emergency-entry";
 import { sendMessageToConversation } from "./send-message";
 
 type SessionRow = {
@@ -16,6 +16,14 @@ type SessionRow = {
   collected_data: Record<string, unknown>;
   active_request_id: string | null;
   last_inbound_message_id: string | null;
+};
+
+type EmergencyIntakeData = {
+  request_description?: string;
+  request_message_id?: string | null;
+  requester_name?: string | null;
+  source_whatsapp_config_id?: string | null;
+  language?: ReturnType<typeof classifyCitizenLanguage>;
 };
 
 export interface WhatsAppEmergencyInbound {
@@ -52,6 +60,22 @@ function statusText(request: IncidentRequestSummary): string {
   return `Request ${request.request_id}\nStatus: ${status}\n\nLast updated: ${new Date(request.updated_at ?? request.created_at ?? Date.now()).toLocaleString()}`;
 }
 
+function locationFromInbound(input: WhatsAppEmergencyInbound, text: string) {
+  const location = input.input.location;
+  if (location) {
+    return {
+      location: location.name ?? location.address ?? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}`,
+      latitude: location.latitude,
+      longitude: location.longitude,
+    };
+  }
+  // A locality, landmark, or Maps URL remains useful coordinator context even
+  // when WhatsApp did not supply coordinates. We intentionally do not try to
+  // geocode it or infer a pin.
+  if (text.length >= 3) return { location: text, latitude: null, longitude: null };
+  return null;
+}
+
 async function loadSession(db: SupabaseClient, accountId: string, conversationId: string) {
   const { data, error } = await db.from("communication_sessions")
     .select("id,state,collected_data,active_request_id,last_inbound_message_id")
@@ -78,9 +102,9 @@ async function saveSession(
   if (error) throw new Error(`Could not create emergency session: ${error.message}`);
 }
 
-/** Minimal deterministic, one-message citizen intake. Persistence and provider
- * idempotency happen before this adapter, so unmatched messages remain in the
- * shared inbox and a webhook replay cannot create a second request. */
+/** Deterministic two-step citizen intake. Persistence and provider idempotency
+ * happen before this adapter, so unmatched messages remain in the shared
+ * inbox and a webhook replay cannot create a second request. */
 export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInbound): Promise<{ consumed: boolean }> {
   const originalText = input.input.text ?? "";
   const text = normalized(originalText);
@@ -115,20 +139,45 @@ export async function handleWhatsAppEmergencyInbound(input: WhatsAppEmergencyInb
 
   // A citizen must explicitly enter capture. Other content remains available
   // to a human and existing explicitly configured deterministic workflows.
-  if (!session || session.state !== "awaiting_request") return { consumed: false };
-  const location = input.input.location;
-  const hasEvidence = Boolean(text || location || (input.inboundContentType && input.inboundContentType !== "text"));
-  if (!hasEvidence) return { consumed: false };
-  const locationText = location ? location.name ?? location.address ?? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}` : "Information missing";
+  if (!session) return { consumed: false };
+
+  if (session.state === "awaiting_request") {
+    // A pin sent first is not silently treated as an incident: it does not
+    // describe what the citizen needs. The prompt asks for the request first.
+    const hasRequest = Boolean(text || (input.inboundContentType && input.inboundContentType !== "text" && input.inboundContentType !== "location"));
+    if (!hasRequest) {
+      await sendReply(input.db, input.accountId, input.conversationId, "Please briefly describe what happened first. You can also send a photo or voice message as evidence.\n\nकृपया पहिले समस्या छोटकरीमा लेख्नुहोस्। फोटो वा voice message पनि पठाउन सक्नुहुन्छ। ");
+      return { consumed: true };
+    }
+    const collectedData: EmergencyIntakeData = {
+      ...(session.collected_data as EmergencyIntakeData),
+      request_description: originalText || `Citizen ${input.inboundContentType ?? "media"} evidence received.`,
+      request_message_id: input.inboundDatabaseMessageId ?? null,
+      requester_name: normalized(input.knownRequesterName) || null,
+      source_whatsapp_config_id: input.sourceWhatsAppConfigId ?? null,
+      language: classifyCitizenLanguage(originalText),
+    };
+    await saveSession(input.db, input, session, "awaiting_location", null, collectedData);
+    await sendReply(input.db, input.accountId, input.conversationId, BILINGUAL_LOCATION_PROMPT);
+    return { consumed: true };
+  }
+
+  if (session.state !== "awaiting_location") return { consumed: false };
+  const location = locationFromInbound(input, text);
+  if (!location) {
+    await sendReply(input.db, input.accountId, input.conversationId, BILINGUAL_LOCATION_PROMPT);
+    return { consumed: true };
+  }
+  const collectedData = session.collected_data as EmergencyIntakeData;
   const request = await createIncidentRequest(input.db, {
     accountId: input.accountId, userId: input.userId, contactId: input.contactId, conversationId: input.conversationId,
-    requesterName: normalized(input.knownRequesterName) || "WhatsApp citizen", category: "information", location: locationText,
-    peopleAffected: 0, priority: "medium", description: originalText || `Information missing — ${input.inboundContentType ?? "media"} evidence received.`,
-    latitude: location?.latitude ?? null, longitude: location?.longitude ?? null,
-    sourceWhatsAppConfigId: input.sourceWhatsAppConfigId ?? null, sourceMessageId: input.inboundDatabaseMessageId ?? null,
+    requesterName: collectedData.requester_name || normalized(input.knownRequesterName) || "WhatsApp citizen", category: "information", location: location.location,
+    peopleAffected: 0, priority: "medium", description: collectedData.request_description ?? "Citizen request received.",
+    latitude: location.latitude, longitude: location.longitude,
+    sourceWhatsAppConfigId: collectedData.source_whatsapp_config_id ?? input.sourceWhatsAppConfigId ?? null, sourceMessageId: collectedData.request_message_id ?? input.inboundDatabaseMessageId ?? null,
   });
   await saveSession(input.db, input, session, "waiting_for_coordinator", request.id, {
-    ...(session?.collected_data ?? {}), language: classifyCitizenLanguage(originalText),
+    ...collectedData,
   });
   const related = await findPossibleRelatedIncidents(input.db, input.accountId, request.id).catch(() => []);
   const relatedLine = related[0] ? "\n\nYour request may relate to an existing response in this area. We will continue to update you here." : "";

@@ -1,33 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole, toErrorResponse } from "@/lib/auth/account";
-
-type ResponseSelection = {
-  teamId: string | null;
-  vehicleId: string | null;
-  locationId: string | null;
-  inventoryId: string | null;
-  remark: string | null;
-};
-
-function optionalId(value: unknown): string | null | undefined {
-  if (value == null || value === "") return null;
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
-export function parseResponseSelection(value: unknown): ResponseSelection | null {
-  if (!value || typeof value !== "object") return null;
-  const body = value as Record<string, unknown>;
-  const teamId = optionalId(body.teamId);
-  const vehicleId = optionalId(body.vehicleId);
-  const locationId = optionalId(body.locationId);
-  const inventoryId = optionalId(body.inventoryId);
-  const rawRemark = body.remark;
-  if ([teamId, vehicleId, locationId, inventoryId].some((item) => item === undefined) || (rawRemark != null && typeof rawRemark !== "string")) return null;
-  if (!teamId && !vehicleId && !locationId && !inventoryId) return null;
-  const remark = typeof rawRemark === "string" ? rawRemark.trim() : "";
-  if (remark.length > 1000) return null;
-  return { teamId: teamId ?? null, vehicleId: vehicleId ?? null, locationId: locationId ?? null, inventoryId: inventoryId ?? null, remark: remark || null };
-}
+import { parseResponseSelection } from "./selection";
 
 /** Coordinator-only, atomic confirmation. The RPC owns the stale-resource
  * check and writes the existing incident assignment fields plus activity. */

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ requireRole: vi.fn(), toErrorResponse: vi.fn(() => new Response("error", { status: 500 })) }));
 vi.mock("@/lib/auth/account", () => mocks);
 
-import { parseResponseSelection, POST } from "./route";
+import { POST } from "./route";
+import { parseResponseSelection } from "./selection";
 
 function context(id = "incident-1") {
   return { params: Promise.resolve({ id }) };

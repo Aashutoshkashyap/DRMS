@@ -6,16 +6,15 @@
 // a read-only roster too).
 //
 // Field visibility
-//   Sensitive fields (email) are returned only when the caller is
-//   admin+. Agents and viewers see name + avatar + role + joined
-//   date only. This mirrors the design decision from the planning
-//   phase: "agent/viewer sees names only".
+//   This directory is visible only to authenticated members of the same
+//   account. During an incident, every coordinator needs a contactable
+//   administrator roster, so colleague email and role are included.
 // ============================================================
 
 import { NextResponse } from "next/server";
 
 import { getCurrentAccount, toErrorResponse } from "@/lib/auth/account";
-import { canManageMembers, isAccountRole } from "@/lib/auth/roles";
+import { isAccountRole } from "@/lib/auth/roles";
 import type { AccountMember } from "@/types";
 
 interface ProfileRow {
@@ -47,8 +46,6 @@ export async function GET() {
       );
     }
 
-    const canSeeEmails = canManageMembers(ctx.role);
-
     const members: AccountMember[] = (data as ProfileRow[]).flatMap((row) => {
       // Defensive: the DB enum should never let an unknown role
       // through, but if a migration ever broadens the enum without
@@ -58,7 +55,7 @@ export async function GET() {
         {
           user_id: row.user_id,
           full_name: row.full_name ?? "",
-          email: canSeeEmails ? row.email : null,
+          email: row.email,
           avatar_url: row.avatar_url,
           role: row.account_role,
           joined_at: row.created_at,
