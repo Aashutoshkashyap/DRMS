@@ -9,7 +9,7 @@ const ACTION_LABEL: Record<IncidentActivity["action"], string> = {
   status_changed: "Response status changed",
   assignment_confirmed: "Assignment confirmed",
   notification_queued: "Citizen notification queued",
-  notification_sent: "Citizen notification sent",
+  notification_sent: "Citizen notification accepted by WhatsApp transport",
   notification_failed: "Citizen notification failed",
   notification_retry_requested: "Citizen notification retry requested",
   case_note_added: "Case note added",

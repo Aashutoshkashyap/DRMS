@@ -96,7 +96,7 @@ export interface SendMessageParams {
 export interface SendMessageResult {
   /** Our `messages.id` (the persisted row). */
   messageId: string;
-  /** Meta's `wamid` for the delivered message. */
+  /** Provider message ID after its send API accepts the request; this is not a delivery receipt. */
   whatsappMessageId: string;
 }
 

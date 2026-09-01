@@ -106,7 +106,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, duplicate: result.duplicate });
   } catch (error) {
     console.error('[openwa] inbound persistence failed:', error);
-    await recordHealthFailure(db, config.account_id, 'webhook', 'Inbound WhatsApp processing failed after gateway receipt.');
+    await recordHealthFailure(db, config.account_id, 'webhook', 'Inbound WhatsApp processing delayed; OpenWA will retry the message.');
     return NextResponse.json({ error: 'Could not persist inbound message' }, { status: 500 });
   }
 }

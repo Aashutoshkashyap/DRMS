@@ -230,6 +230,14 @@ If the intended work is instead a migration to a different stack, database, host
 - Preserve the citizen message and incident path if storage fails, while recording grouped, recoverable storage/webhook/outbound operational alerts for coordinators. The dashboard reports only observed degraded/incident signals and never declares green health from a page load.
 - Keep existing idempotency, deterministic intake, human assignment/dispatch control, WhatsApp transport, and SMS scope unchanged.
 
+### Phase AD — Failure fallback visibility
+
+**Status:** Implemented locally; no database migration is required.
+
+- Preserve an unsent coordinator text reply in browser session storage until the existing transport plus CRM persistence path succeeds; show an explicit offline state rather than silently discarding it.
+- Make storage failures visible in the incident evidence panel without losing the message/request, make dashboard data failure explicit, and label WhatsApp transport acceptance separately from delivery confirmation.
+- Keep the existing idempotent OpenWA retry, failed-notification follow-up, explicit coordinator retry, account-access warning, and manual recovery paths. [`docs/failure-fallback.md`](docs/failure-fallback.md) documents the operational matrix without adding a separate recovery platform.
+
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |
 | `npm run lint` | Passed | 0 errors; 35 inherited warnings remain outside this milestone. |

@@ -464,7 +464,7 @@ export function MessageThread({
 
   const handleSend = useCallback(
     async (text: string, replyToId?: string) => {
-      if (!conversation) return;
+      if (!conversation) return false;
 
       const tempId = `temp-${Date.now()}`;
 
@@ -480,7 +480,6 @@ export function MessageThread({
         reply_to_message_id: replyToId,
       };
       onNewMessage(optimisticMsg);
-      setReplyTo(null);
 
       try {
         const res = await fetch("/api/whatsapp/send", {
@@ -502,18 +501,21 @@ export function MessageThread({
           toast.error(`Failed to send: ${reason}`);
           // Mark the optimistic bubble as failed so the user sees what happened
           onUpdateMessage(tempId, { status: "failed" });
-          return;
+          return false;
         }
 
         // Success — the realtime INSERT event will replace the temp bubble
         // with the real DB row. If realtime hasn't arrived yet, at least
         // flip status to 'sent' so the UI stops showing "sending".
         onUpdateMessage(tempId, { status: "sent" });
+        setReplyTo(null);
+        return true;
       } catch (err) {
         console.error("Failed to send message:", err);
         const reason = err instanceof Error ? err.message : "network error";
         toast.error(`Failed to send: ${reason}`);
         onUpdateMessage(tempId, { status: "failed" });
+        return false;
       }
     },
     [conversation, onNewMessage, onUpdateMessage]

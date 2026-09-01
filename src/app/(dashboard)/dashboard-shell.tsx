@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { AccountAccessAlert } from "@/components/layout/account-access-alert";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
+import { NetworkStatus } from "@/components/system/network-status";
 
 // Auth-gated dashboard shell. Extracted from the layout so the layout
 // itself can stay a server component and export metadata (noindex) —
@@ -52,6 +53,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           {/* Above every page: writes are being rejected and here's why.
               Renders nothing unless the account/role failed to resolve. */}
+          <NetworkStatus />
           <AccountAccessAlert />
           {account?.is_demo && <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200"><strong>DEMO DATA</strong> — this account contains fictional training records only. Do not use it for live operations.</div>}
           {children}

@@ -100,7 +100,7 @@ export default function FollowUpPage() {
       const response = await fetch(`/api/incidents/${item.incident.id}/status-notification/retry`, { method: "POST" });
       if (!response.ok) throw new Error("Could not retry the citizen notification.");
       const result = await response.json() as { delivered: boolean };
-      toast.success(result.delivered ? "Citizen status notification sent." : "Notification retry was requested.");
+      toast.success(result.delivered ? "Citizen notification accepted by WhatsApp transport; delivery is not yet confirmed." : "Notification retry was requested.");
       await load();
     } catch {
       toast.error("Could not retry the citizen notification. Use the communication history if the problem persists.");

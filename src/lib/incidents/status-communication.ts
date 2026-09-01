@@ -102,7 +102,7 @@ export async function deliverIncidentStatusUpdate(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown WhatsApp delivery failure";
     await db.from("incident_status_deliveries").update({ delivery_status: "failed", error_message: message }).eq("id", delivery.id);
-    await recordHealthFailure(db, accountId, "outbound", "WhatsApp status delivery failed");
+    await recordHealthFailure(db, accountId, "outbound", "WhatsApp communication unavailable; citizen notification failed.");
     throw error;
   }
 }

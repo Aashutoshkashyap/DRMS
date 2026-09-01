@@ -111,7 +111,8 @@ interface MediaDraft {
 interface MessageComposerProps {
   conversationId: string;
   sessionExpired: boolean;
-  onSend: (text: string, replyToId?: string) => void;
+  /** Resolves true only after the transport accepted and CRM persisted it. */
+  onSend: (text: string, replyToId?: string) => Promise<boolean>;
   onSendMedia: (payload: SendMediaPayload) => void;
   onSendInteractive: (payload: InteractiveMessagePayload, replyToId?: string) => void;
   onOpenTemplates: () => void;
@@ -144,7 +145,9 @@ export function MessageComposer({
 
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [loadedDraftConversationId, setLoadedDraftConversationId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const draftStorageKey = `drms:inbox-draft:${conversationId}`;
 
   // Interactive-message builder dialog + quick-reply picker.
   const [interactiveOpen, setInteractiveOpen] = useState(false);
@@ -218,21 +221,49 @@ export function MessageComposer({
     el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
   }, []);
 
+  // Keep the small text draft locally while a tab is offline or a send fails.
+  // Attachments are deliberately not serialized: their object/file lifecycle
+  // is already handled separately and pretending they were recoverable would
+  // be a false confirmation.
+  useEffect(() => {
+    try { setText(window.sessionStorage.getItem(draftStorageKey) ?? ""); }
+    catch { setText(""); }
+    setLoadedDraftConversationId(conversationId);
+  }, [conversationId, draftStorageKey]);
+
+  useEffect(() => {
+    if (loadedDraftConversationId !== conversationId) return;
+    try {
+      if (text) window.sessionStorage.setItem(draftStorageKey, text);
+      else window.sessionStorage.removeItem(draftStorageKey);
+    } catch { /* Private-mode/storage failures must not block the composer. */ }
+  }, [conversationId, draftStorageKey, loadedDraftConversationId, text]);
+
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
     if (!trimmed || sending || sessionExpired) return;
+    if (!navigator.onLine) {
+      toast.error("Waiting for connection. Your reply is kept in this browser.");
+      return;
+    }
 
     setSending(true);
     try {
-      onSend(trimmed, replyTo?.id);
-      setText("");
-      if (textareaRef.current) {
-        textareaRef.current.style.height = "auto";
+      const sent = await onSend(trimmed, replyTo?.id);
+      if (sent) {
+        setText("");
+        try { window.sessionStorage.removeItem(draftStorageKey); } catch { /* no-op */ }
+        if (textareaRef.current) {
+          textareaRef.current.style.height = "auto";
+        }
       }
+    } catch {
+      // The thread shows the provider/database failure. Keep the draft for a
+      // deliberate human retry instead of silently dropping it.
     } finally {
       setSending(false);
     }
-  }, [text, sending, sessionExpired, onSend, replyTo?.id]);
+  }, [text, sending, sessionExpired, onSend, replyTo?.id, draftStorageKey]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
