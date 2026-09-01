@@ -60,6 +60,32 @@ describe("WhatsApp emergency adapter", () => {
     expect(mocks.createIncidentRequest).toHaveBeenCalledTimes(1);
   });
 
+  it("starts a separate request after a completed request for the same citizen", async () => {
+    const db = sessionDb();
+    const base = { db, accountId: "account-1", userId: "owner-1", contactId: "contact-1", conversationId: "conversation-1" };
+    mocks.createIncidentRequest
+      .mockResolvedValueOnce({ id: "deal-1", request_id: "DRMS-FIRST", category: "rescue", incident_status: "received", assigned_team: null, assigned_resource: null, conversation_id: "conversation-1" })
+      .mockResolvedValueOnce({ id: "deal-2", request_id: "DRMS-SECOND", category: "food_water", incident_status: "received", assigned_team: null, assigned_resource: null, conversation_id: "conversation-1" });
+
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m1", input: { text: "START" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m2", input: { interactionId: "emergency:service:rescue" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m3", input: { text: "Sita Rai" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m4", input: { text: "Bhaktapur Ward 5" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m5", input: { text: "3" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m6", input: { text: "Trapped after landslide" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m7", input: { interactionId: "emergency:confirm" } });
+
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m8", input: { text: "START" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m9", input: { interactionId: "emergency:service:food_water" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m10", input: { text: "Kalanki" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m11", input: { text: "5" } });
+    await handleWhatsAppEmergencyInbound({ ...base, inboundMessageId: "m12", input: { interactionId: "emergency:confirm" } });
+
+    expect(mocks.createIncidentRequest).toHaveBeenCalledTimes(2);
+    expect(mocks.createIncidentRequest).toHaveBeenLastCalledWith(db, expect.objectContaining({ contactId: "contact-1", category: "food_water", location: "Kalanki", peopleAffected: 5 }));
+    expect(mocks.sendMessageToConversation).toHaveBeenLastCalledWith(db, "account-1", expect.objectContaining({ contentText: expect.stringContaining("DRMS-SECOND") }));
+  });
+
   it("continues an OpenWA numeric service selection through to one request", async () => {
     const db = sessionDb();
     const base = {

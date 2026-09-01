@@ -24,7 +24,7 @@ describe("incident response confirmation route", () => {
     const response = await POST(new Request("http://test/api/incidents/incident-1/confirm-response", { method: "POST", body: JSON.stringify({ teamId: "team-1" }) }), context());
     expect(response.status).toBe(200);
     expect(mocks.requireRole).toHaveBeenCalledWith("agent");
-    expect(rpc).toHaveBeenCalledWith("confirm_incident_response", expect.objectContaining({ p_deal_id: "incident-1", p_team_id: "team-1" }));
+    expect(rpc).toHaveBeenCalledWith("confirm_incident_response_with_remark", expect.objectContaining({ p_deal_id: "incident-1", p_team_id: "team-1", p_remark: null }));
   });
 
   it("returns a safe conflict when the selected resource went stale", async () => {

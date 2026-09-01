@@ -6,6 +6,7 @@ type ResponseSelection = {
   vehicleId: string | null;
   locationId: string | null;
   inventoryId: string | null;
+  remark: string | null;
 };
 
 function optionalId(value: unknown): string | null | undefined {
@@ -20,9 +21,12 @@ export function parseResponseSelection(value: unknown): ResponseSelection | null
   const vehicleId = optionalId(body.vehicleId);
   const locationId = optionalId(body.locationId);
   const inventoryId = optionalId(body.inventoryId);
-  if ([teamId, vehicleId, locationId, inventoryId].some((item) => item === undefined)) return null;
+  const rawRemark = body.remark;
+  if ([teamId, vehicleId, locationId, inventoryId].some((item) => item === undefined) || (rawRemark != null && typeof rawRemark !== "string")) return null;
   if (!teamId && !vehicleId && !locationId && !inventoryId) return null;
-  return { teamId: teamId ?? null, vehicleId: vehicleId ?? null, locationId: locationId ?? null, inventoryId: inventoryId ?? null };
+  const remark = typeof rawRemark === "string" ? rawRemark.trim() : "";
+  if (remark.length > 1000) return null;
+  return { teamId: teamId ?? null, vehicleId: vehicleId ?? null, locationId: locationId ?? null, inventoryId: inventoryId ?? null, remark: remark || null };
 }
 
 /** Coordinator-only, atomic confirmation. The RPC owns the stale-resource
@@ -36,12 +40,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     const { supabase } = await requireRole("agent");
-    const { data, error } = await supabase.rpc("confirm_incident_response", {
+    const { data, error } = await supabase.rpc("confirm_incident_response_with_remark", {
       p_deal_id: id,
       p_team_id: selection.teamId,
       p_vehicle_id: selection.vehicleId,
       p_location_id: selection.locationId,
       p_inventory_id: selection.inventoryId,
+      p_remark: selection.remark,
     });
     if (error) {
       const stale = error.message.includes("Resource is no longer available");

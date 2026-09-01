@@ -61,6 +61,15 @@ BEGIN
     RAISE EXCEPTION 'public.incident_follow_ups is missing — migration 048 did not apply';
   END IF;
 
+  -- Phase 10A records coordinator remarks and routes status movement through
+  -- one account-scoped function, rather than allowing a parallel audit trail.
+  IF to_regprocedure('public.transition_incident_response_status(uuid,uuid,text)') IS NULL THEN
+    RAISE EXCEPTION 'incident status transition RPC is missing — migration 049 did not apply';
+  END IF;
+  IF to_regprocedure('public.confirm_incident_response_with_remark(uuid,uuid,uuid,uuid,uuid,text)') IS NULL THEN
+    RAISE EXCEPTION 'incident assignment accountability RPC is missing — migration 049 did not apply';
+  END IF;
+
   RAISE NOTICE 'schema verification passed';
 END
 $$;

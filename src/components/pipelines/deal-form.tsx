@@ -79,6 +79,8 @@ export function DealForm({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmStatusChange, setConfirmStatusChange] = useState(false);
+  const [coordinatorRemark, setCoordinatorRemark] = useState("");
   const selectedContact = contacts.find((contact) => contact.id === contactId);
   const citizenName = selectedContact?.name || deal?.contact?.name || deal?.requester_name || title || "Not recorded";
   const citizenPhone = selectedContact?.phone || deal?.contact?.phone || "Not recorded";
@@ -90,6 +92,8 @@ export function DealForm({
   useEffect(() => {
     if (!open) return;
     setConfirmDelete(false);
+    setConfirmStatusChange(false);
+    setCoordinatorRemark("");
     if (deal) {
       setTitle(deal.title);
       // contact_id is nullable when the contact has been deleted
@@ -196,14 +200,30 @@ export function DealForm({
     };
 
     if (deal) {
+      const { stage_id: requestedStageId, ...incidentFields } = payload;
       const { error } = await supabase
         .from("deals")
-        .update(payload)
+        .update(incidentFields)
         .eq("id", deal.id);
       if (error) {
         toast.error(t("toastFailedSave"));
         setSaving(false);
         return;
+      }
+      if (requestedStageId !== deal.stage_id) {
+        const response = await fetch(`/api/incidents/${deal.id}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stageId: requestedStageId, remark: coordinatorRemark }),
+        });
+        if (!response.ok) {
+          const result = await response.json().catch(() => null) as { error?: string } | null;
+          toast.error(result?.error ?? "Incident details were saved, but the status could not be changed.");
+          setSaving(false);
+          onSaved();
+          return;
+        }
+        setCaseStatus((stages.find((stage) => stage.id === requestedStageId)?.incident_status ?? caseStatus) as Deal["incident_status"]);
       }
     } else {
       const {
@@ -320,7 +340,7 @@ export function DealForm({
               <Label className="text-muted-foreground">Response status</Label>
               <select
                 value={stageId}
-                onChange={(e) => setStageId(e.target.value)}
+                onChange={(e) => { setStageId(e.target.value); setConfirmStatusChange(false); }}
                 className="h-9 w-full rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary"
               >
                 {stages.map((s) => (
@@ -329,6 +349,10 @@ export function DealForm({
                   </option>
                 ))}
               </select>
+              {deal && stageId !== deal.stage_id && <>
+                <p className="text-xs text-muted-foreground">Status changes are recorded with your account and can optionally include a coordinator remark. This does not dispatch a response.</p>
+                <Textarea value={coordinatorRemark} onChange={(event) => setCoordinatorRemark(event.target.value)} maxLength={1000} placeholder="Optional coordinator remark" className="min-h-20 border-border bg-muted text-foreground" />
+              </>}
             </div>
 
             {deal && <IncidentWorkflow current={caseStatus} />}
@@ -375,13 +399,21 @@ export function DealForm({
                 {t("cancel")}
               </Button>
               <Button
-                onClick={handleSave}
+                onClick={() => {
+                  if (deal && stageId !== deal.stage_id && !confirmStatusChange) {
+                    setConfirmStatusChange(true);
+                    return;
+                  }
+                  void handleSave();
+                }}
                 disabled={saving || !title.trim() || !contactId || !stageId}
                 className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                {saving ? t("saving") : deal ? "Save incident" : "Create incident"}
+                {saving ? t("saving") : deal && stageId !== deal.stage_id && !confirmStatusChange ? "Review status change" : deal ? "Save incident" : "Create incident"}
               </Button>
             </div>
+
+            {deal && stageId !== deal.stage_id && confirmStatusChange && <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs"><span className="text-foreground">Confirm this workflow status change? It will be attributed to your coordinator account.</span><button type="button" onClick={() => setConfirmStatusChange(false)} disabled={saving} className="rounded px-2 py-1 text-muted-foreground hover:bg-muted">{t("cancel")}</button></div>}
 
             {deal &&
               (confirmDelete ? (

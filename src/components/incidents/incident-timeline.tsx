@@ -16,11 +16,24 @@ const ACTION_LABEL: Record<IncidentActivity["action"], string> = {
   follow_up_created: "Follow-up required",
   follow_up_reviewed: "Follow-up reviewed",
   follow_up_cleared: "Follow-up cleared",
+  coordinator_remark: "Coordinator remark",
+  coordinator_assigned: "Coordinator ownership changed",
+  incident_details_updated: "Incident details updated",
 };
 
-function actorName(activity: IncidentActivity, names: Map<string, string>) {
+type Actor = { name: string; email: string | null };
+
+function actorName(activity: IncidentActivity, actors: Map<string, Actor>) {
   if (!activity.actor_user_id) return "System";
-  return names.get(activity.actor_user_id) || "Coordinator";
+  const actor = actors.get(activity.actor_user_id);
+  if (!actor) return "Coordinator";
+  return actor.email ? `${actor.name} · ${actor.email}` : actor.name;
+}
+
+function category(activity: IncidentActivity) {
+  if (["notification_queued", "notification_sent", "notification_failed", "notification_retry_requested"].includes(activity.action)) return "Communication";
+  if (activity.actor_user_id) return "Coordinator";
+  return "System";
 }
 
 function changeSummary(activity: IncidentActivity) {
@@ -31,13 +44,16 @@ function changeSummary(activity: IncidentActivity) {
   const fields = ["team", "vehicle", "location", "inventory"]
     .map((field) => activity.metadata[field])
     .filter((value): value is string => typeof value === "string");
-  return fields.length ? fields.join(" · ") : null;
+  if (fields.length) return fields.join(" · ");
+  const changedFields = activity.metadata.changed_fields;
+  if (Array.isArray(changedFields) && changedFields.every((field): field is string => typeof field === "string")) return `Updated: ${changedFields.join(", ").replaceAll("_", " ")}`;
+  return null;
 }
 
 export function IncidentTimeline({ dealId }: { dealId: string }) {
   const db = createClient();
   const [activity, setActivity] = useState<IncidentActivity[]>([]);
-  const [names, setNames] = useState(new Map<string, string>());
+  const [actors, setActors] = useState(new Map<string, Actor>());
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -50,9 +66,9 @@ export function IncidentTimeline({ dealId }: { dealId: string }) {
     if (error) { setLoading(false); return; }
     const records = (data ?? []) as IncidentActivity[];
     const actorIds = [...new Set(records.map((item) => item.actor_user_id).filter((id): id is string => Boolean(id)))];
-    const profiles = actorIds.length ? await db.from("profiles").select("user_id,full_name").in("user_id", actorIds) : { data: [] };
+    const profiles = actorIds.length ? await db.from("profiles").select("user_id,full_name,email").in("user_id", actorIds) : { data: [] };
     setActivity(records);
-    setNames(new Map((profiles.data ?? []).map((profile) => [profile.user_id, profile.full_name || "Coordinator"])));
+    setActors(new Map((profiles.data ?? []).map((profile) => [profile.user_id, { name: profile.full_name || "Coordinator", email: profile.email || null }])));
     setLoading(false);
   }, [db, dealId]);
 
@@ -62,6 +78,6 @@ export function IncidentTimeline({ dealId }: { dealId: string }) {
 
   return <section className="space-y-3 rounded-xl border border-border bg-card p-3">
     <div><h3 className="text-sm font-semibold text-foreground">Activity</h3><p className="text-xs text-muted-foreground">Append-only coordinator and system history.</p></div>
-    {loading ? <p className="text-xs text-muted-foreground">Loading activity…</p> : activity.length === 0 ? <p className="text-xs text-muted-foreground">No Phase 8 activity is recorded yet. New status, assignment, note, and notification actions will appear here.</p> : <ol className="space-y-3 border-l border-border pl-3">{activity.map((item) => <li key={item.id} className="relative"><span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-primary" /><p className="text-sm font-medium text-foreground">{ACTION_LABEL[item.action]}</p>{changeSummary(item) && <p className="text-xs text-muted-foreground">{changeSummary(item)}</p>}<p className="mt-1 text-xs text-muted-foreground">{actorName(item, names)} · {new Date(item.created_at).toLocaleString()}</p></li>)}</ol>}
+    {loading ? <p className="text-xs text-muted-foreground">Loading activity…</p> : activity.length === 0 ? <p className="text-xs text-muted-foreground">No incident activity is recorded yet. New status, assignment, note, and communication actions will appear here.</p> : <ol className="space-y-3 border-l border-border pl-3">{activity.map((item) => <li key={item.id} className="relative"><span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-primary" /><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium text-foreground">{ACTION_LABEL[item.action]}</p><span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{category(item)}</span></div>{changeSummary(item) && <p className="text-xs text-muted-foreground">{changeSummary(item)}</p>}{typeof item.metadata.remark === "string" && <p className="mt-1 rounded bg-muted/70 px-2 py-1 text-xs text-foreground">Remark: {item.metadata.remark}</p>}<p className="mt-1 text-xs text-muted-foreground">{actorName(item, actors)} · {new Date(item.created_at).toLocaleString()}</p></li>)}</ol>}
   </section>;
 }

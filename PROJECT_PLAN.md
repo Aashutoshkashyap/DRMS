@@ -203,6 +203,15 @@ If the intended work is instead a migration to a different stack, database, host
 - Keep coordinator-only notes clearly separate from citizen communication and make incident context visible in the inbox contact panel. The demo data remains fictional and isolated to the explicitly flagged `DEMO DATA` account.
 - Add the final acceptance-facing dashboard communication-failure action, case identity summary, operations-first navigation ordering, and [`docs/acceptance-testing.md`](docs/acceptance-testing.md). This runbook distinguishes CRM state from provider-confirmed delivery and preserves the official-data adapter boundary.
 
+### Phase 10A — Multi-coordinator accountability and repeated citizen requests
+
+**Status:** Implemented locally; migration `049` must be applied before accountability routes are used.
+
+- Preserve the existing account/member/RLS architecture and add no account hard-coding. Status changes now pass through one coordinator-authenticated, pipeline-scoped RPC; the existing status trigger and delivery outbox remain the source of workflow and citizen-notification history.
+- Extend only the existing append-only `incident_activity` trail with attributed coordinator ownership, action-linked optional remarks, and timeline display categories. No second audit system, dispatch automation, or citizen transport change is introduced.
+- Keep one citizen/contact able to hold independent incidents. A new `START` after completion remains an independently created request; duplicate inbound event protection remains unchanged. Citizen status lookup remains account and contact scoped.
+- Make the contact related-incidents list open each incident independently, and extend guarded DEMO DATA with two separate fictional incidents for one fictional citizen plus optional second-coordinator attribution.
+
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |
 | `npm run lint` | Passed | 0 errors; 35 inherited warnings remain outside this milestone. |

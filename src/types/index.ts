@@ -182,7 +182,7 @@ export interface IncidentActivity {
   account_id: string;
   deal_id: string;
   actor_user_id: string | null;
-  action: "incident_created" | "status_changed" | "assignment_confirmed" | "notification_queued" | "notification_sent" | "notification_failed" | "notification_retry_requested" | "case_note_added" | "follow_up_created" | "follow_up_reviewed" | "follow_up_cleared";
+  action: "incident_created" | "status_changed" | "assignment_confirmed" | "notification_queued" | "notification_sent" | "notification_failed" | "notification_retry_requested" | "case_note_added" | "follow_up_created" | "follow_up_reviewed" | "follow_up_cleared" | "coordinator_remark" | "coordinator_assigned" | "incident_details_updated";
   previous_value: string | null;
   next_value: string | null;
   metadata: Record<string, unknown>;

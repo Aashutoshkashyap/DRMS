@@ -9,6 +9,7 @@ import {
   type ResourceRecommendation,
 } from "@/lib/resources/recommendations";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
 type Location = { id: string; name: string; location_type: string; latitude: number | string | null; longitude: number | string | null; availability: ResourceAvailability };
@@ -32,6 +33,7 @@ export function ResourceRecommendations({ deal, onConfirmed }: { deal: Deal; onC
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [inventory, setInventory] = useState<Inventory[]>([]);
   const [selection, setSelection] = useState<Selection>(emptySelection);
+  const [remark, setRemark] = useState("");
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -98,7 +100,7 @@ export function ResourceRecommendations({ deal, onConfirmed }: { deal: Deal; onC
     const response = await fetch(`/api/incidents/${deal.id}/confirm-response`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(selection),
+      body: JSON.stringify({ ...selection, remark }),
     });
     const payload = await response.json().catch(() => null) as { error?: string } | null;
     setSaving(false);
@@ -131,6 +133,7 @@ export function ResourceRecommendations({ deal, onConfirmed }: { deal: Deal; onC
     </div>
     {deal.assigned_team && !deal.assigned_team_id && <p className="text-xs text-muted-foreground">Existing team assignment: {deal.assigned_team}</p>}
     {deal.assigned_resource && !deal.assigned_vehicle_id && !deal.assigned_location_id && !deal.assigned_inventory_id && <p className="text-xs text-muted-foreground">Existing resource assignment: {deal.assigned_resource}</p>}
+    <div className="grid gap-1"><label className="text-xs font-medium text-muted-foreground">Coordinator remark (optional)</label><Textarea value={remark} onChange={(event) => setRemark(event.target.value)} maxLength={1000} placeholder="Why this verified resource was selected" className="min-h-20 bg-card text-sm" /></div>
     {!canConfirm && <p className="text-xs text-amber-700 dark:text-amber-300">Verify this incident before confirming a response. Recommendation is not assignment.</p>}
     <Button type="button" onClick={confirm} disabled={!canConfirm || saving || !Object.values(selection).some(Boolean)}>{saving ? "Confirming…" : "Confirm assignment"}</Button>
   </section>;

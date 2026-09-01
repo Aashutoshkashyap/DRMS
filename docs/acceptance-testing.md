@@ -35,15 +35,18 @@ Use only the separately marked `DEMO DATA` account for fictional CRM scenarios. 
 6. Confirm recommendations show only stored-available, compatible resources, ranked by stored-coordinate distance. Check that an unavailable or incompatible nearby resource is not recommended.
 7. Select a resource and use **Confirm assignment**. Confirm the incident becomes `ASSIGNED`, the selected resource becomes `ASSIGNED`, and an activity entry is added. Confirm no dispatch occurs automatically.
 8. Change response status manually through `DISPATCHED`, `IN PROGRESS`, and `RESOLVED` only after the coordinator decision. Confirm the workflow and timeline record each change.
-9. Review Resource & Locations for available, assigned, unavailable/limited, team, vehicle, location, and inventory information. It must not claim live GPS tracking.
+9. Confirm a status change in the incident case sheet and, where useful, add a coordinator remark. Verify the timeline identifies the coordinator name/email, action time, old/new status, and the optional remark. Board drag-and-drop must request confirmation before changing a status.
+10. Open the related-incidents tab for the fictional Aasha Gurung contact. Confirm `DEMO-RESCUE-001` and `DEMO-SHELTER-007` remain distinct incidents and each opens independently.
+11. With two demo-account members configured, repeat a status or assignment action under each account. Confirm the shared operational data remains available while the timeline attributes each action to the correct coordinator.
+12. Review Resource & Locations for available, assigned, unavailable/limited, team, vehicle, location, and inventory information. It must not claim live GPS tracking.
 
 ### 3. Communication and follow-up
 
-10. In Citizen Communications, confirm the citizen, channel, conversation, related incident, and coordinator-only notes are clear. Coordinator notes must not be sent to the citizen.
-11. Verify the case timeline distinguishes notification queued, sent, and failed events. Treat **Sent** as provider acceptance only.
-12. Open Follow-up Required. Confirm incident ID, priority, location, response status, reason, and next coordinator action are visible.
-13. Inspect the simulated failed-delivery demo case. Confirm it is in the communication-failure filter and that retry is an explicit coordinator action. Do not trigger a retry unless a controlled test number and provider are configured.
-14. Mark an overdue demo follow-up reviewed. Confirm the item remains until its stored underlying condition is cleared; there is no automatic retry or escalation loop.
+13. In Citizen Communications, confirm the citizen, channel, conversation, related incident, and coordinator-only notes are clear. Coordinator notes must not be sent to the citizen.
+14. Verify the case timeline distinguishes notification queued, sent, and failed events. Treat **Sent** as provider acceptance only.
+15. Open Follow-up Required. Confirm incident ID, priority, location, response status, reason, and next coordinator action are visible.
+16. Inspect the simulated failed-delivery demo case. Confirm it is in the communication-failure filter and that retry is an explicit coordinator action. Do not trigger a retry unless a controlled test number and provider are configured.
+17. Mark an overdue demo follow-up reviewed. Confirm the item remains until its stored underlying condition is cleared; there is no automatic retry or escalation loop.
 
 ### 4. Controlled WhatsApp regression tests
 

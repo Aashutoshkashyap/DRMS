@@ -227,22 +227,30 @@ export default function PipelinesPage() {
 
   const handleDealMoved = useCallback(
     async (dealId: string, newStageId: string) => {
-      // Optimistic update — board already animated; just persist.
-      setDeals((prev) =>
-        prev.map((d) => (d.id === dealId ? { ...d, stage_id: newStageId } : d)),
-      );
-      const { error } = await supabase
-        .from("deals")
-        .update({ stage_id: newStageId })
-        .eq("id", dealId);
-      if (error) {
+      const incident = deals.find((deal) => deal.id === dealId);
+      const stage = stages.find((item) => item.id === newStageId);
+      if (!incident || !stage) {
         toast.error(t("toastFailedMoveDeal"));
-        refreshDeals();
+        await refreshDeals();
+        return;
+      }
+      if (!window.confirm(`Change ${incident.request_id || "this incident"} to ${stage.name}? This action will be recorded under your coordinator account.`)) {
+        await refreshDeals();
+        return;
+      }
+      const response = await fetch(`/api/incidents/${dealId}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stageId: newStageId }),
+      });
+      if (!response.ok) {
+        toast.error(t("toastFailedMoveDeal"));
       } else if (!(await requestIncidentStatusNotification(dealId))) {
         toast.error("Status changed, but the WhatsApp update could not be delivered. The failure was recorded for coordinator retry.");
       }
+      await refreshDeals();
     },
-    [supabase, refreshDeals, t],
+    [deals, refreshDeals, stages, t],
   );
 
   const handleAddDeal = useCallback(

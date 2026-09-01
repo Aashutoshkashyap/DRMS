@@ -233,8 +233,11 @@ export function transitionIntake(
     return next ? { state: next, data, prompt: promptForState(next, data), action: null } : { state, data, prompt: text("Choose one of the edit options."), action: null };
   }
   if (state === "start" || !state || state === "waiting_for_coordinator") {
-    if (detected.category) return continueToNext(detected);
+    // A completed citizen can explicitly begin a separate incident. Handle
+    // START before field detection so a prior completed request's category,
+    // location, people count, and details are never reused as the new case.
     if (isStartCommand(value)) return { state: "start", data: { requesterName: data.requesterName }, prompt: emergencyMenu(), action: null };
+    if (detected.category) return continueToNext(detected);
     if (state === "waiting_for_coordinator") return { state, data, prompt: text("Your follow-up has been recorded in the coordinator conversation. Reply START for a new request or send HELP for the menu."), action: null };
     return null;
   }
