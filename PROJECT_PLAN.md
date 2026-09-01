@@ -96,12 +96,15 @@ If the intended work is instead a migration to a different stack, database, host
 
 ### Phase 13C — Shared-workspace access repair
 
-**Status:** In progress.
+**Status:** Complete and deployed.
 
 - Production audit confirmed that the reported empty dashboard belonged to a separate, newly-created personal account. Existing operational account-scoped RLS policies correctly prevented it from seeing another workspace.
 - The underlying defect is invite onboarding: opening the dashboard creates only the stock `Disaster Response Coordination` pipeline, but the invitation redemption function previously treated that harmless scaffold as user data and refused the join.
 - Migration `054_allow_bootstrap_workspace_join.sql` permits cleanup only for that exact six-stage stock scaffold, while conservatively rejecting any contacts, conversations, incidents, settings, integrations, resources, activity, evidence, or other saved account data. Follow-up migration `055_fix_bootstrap_workspace_validator.sql` corrects the validator alias without changing account data or RLS.
 - The dashboard now distinguishes an unjoined private workspace from a shared operational workspace and does not present all-zero incident counters as a successful shared board.
+- Production acceptance used authenticated sessions for the primary workspace owner and a repaired shared administrator: both returned the same 7 incidents, 8 contacts, 8 conversations, 43 activity records, and 1 follow-up. A separate DEMO DATA session could not query a selected primary-workspace incident, its activity, or its follow-up.
+- A demo-only controlled coordinator and outsider verified shared operations without touching the primary WhatsApp workspace: owner and coordinator observed the same forward-only status transitions, assignment, internal note, and six stored conversations; activity included each actor and their configured demo response team; the outsider could not read the demo incident or conversations.
+- The repaired Test Gravity account was moved non-destructively into the primary shared workspace as an admin. Its verified empty bootstrap account was retained because production-account deletion requires separate authorization; the corrected invitation flow removes the exact empty scaffold atomically for future joins.
 
 ### Phase 2 — Disaster Coordination Core
 
