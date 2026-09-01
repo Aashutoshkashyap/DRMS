@@ -75,6 +75,7 @@ export default function PipelinesPage() {
   });
   const [locationField, setLocationField] = useState<"location" | "municipality" | "district">("location");
   const [locationFilter, setLocationFilter] = useState("");
+  const [archiveView, setArchiveView] = useState<"active" | "archived">("active");
 
   // Guard against double-seeding (React StrictMode double-effect in dev).
   const seedAttempted = useRef(false);
@@ -319,6 +320,7 @@ export default function PipelinesPage() {
 
   const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId);
   const filteredDeals = deals.filter((request) =>
+    (archiveView === "active" ? request.incident_status !== "resolved" : request.incident_status === "resolved") &&
     (statusFilter === "all" || request.incident_status === statusFilter) &&
     (categoryFilter === "all" || request.category === categoryFilter) &&
     (priorityFilter === "all" || request.priority === priorityFilter) &&
@@ -445,6 +447,10 @@ export default function PipelinesPage() {
       ) : (
         <>
           <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card/60 p-3">
+            <div className="inline-flex rounded-lg border border-border bg-muted p-0.5" aria-label="Incident archive view">
+              <Button size="sm" variant={archiveView === "active" ? "default" : "ghost"} onClick={() => { setArchiveView("active"); if (statusFilter === "resolved") setStatusFilter("all"); }}>Active</Button>
+              <Button size="sm" variant={archiveView === "archived" ? "default" : "ghost"} onClick={() => { setArchiveView("archived"); setStatusFilter("resolved"); }}>Archived / resolved</Button>
+            </div>
             <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="all">All statuses</option><option value="received">Received</option><option value="verified">Verified</option><option value="assigned">Assigned</option><option value="dispatched">Dispatched</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select>
             <select aria-label="Filter by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="all">All categories</option><option value="rescue">Rescue</option><option value="food_water">Food / Water</option><option value="medicine">Medicine</option><option value="shelter">Shelter</option><option value="missing_person">Missing person</option><option value="information">Information</option></select>
             <select aria-label="Filter by priority" value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} className="h-9 rounded-lg border border-border bg-muted px-2 text-sm text-foreground"><option value="all">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>

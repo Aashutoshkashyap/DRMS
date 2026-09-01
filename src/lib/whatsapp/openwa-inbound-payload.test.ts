@@ -16,6 +16,7 @@ describe("parseOpenWaInboundPayload", () => {
       contentText: "Kathmandu Durbar Square - Kathmandu, Nepal - 27.7172,85.324",
       location: { latitude: 27.7172, longitude: 85.324, name: "Kathmandu Durbar Square", address: "Kathmandu, Nepal" },
       image: null,
+      audio: null,
     });
   });
 
@@ -25,6 +26,11 @@ describe("parseOpenWaInboundPayload", () => {
       contentText: "Damaged road",
       location: null,
       image: { body: "/9j/4AAQ", mimeType: "image/jpeg", caption: "Damaged road" },
+      audio: null,
     });
+  });
+
+  it("keeps an OpenWA voice payload out of message text", () => {
+    expect(parseOpenWaInboundPayload(event({ id: "audio-1", type: "voice", body: "T2dnUw==", mimeType: "audio/ogg" }))).toMatchObject({ contentType: "audio", contentText: "", image: null, audio: { mimeType: "audio/ogg" } });
   });
 });

@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 const DEMO_CONFIRMATION = "DEMO DATA";
-const DEMO_VERSION = "phase-10a.0";
+const DEMO_VERSION = "phase-12.0";
 const command = process.argv[2];
 
 function fail(message) {
@@ -256,6 +256,7 @@ async function seed(db, context) {
   const incidentIds = {};
   const conversationIds = {};
   const contactIdsByPhone = {};
+  const conversationIdsByPhone = {};
   for (const entry of cases) {
     const [requestId, name, phone, category, priority, status, location, municipality, district, description, latitude, longitude, peopleAffected, assignedTeam, assignedResource, assignedTeamId, assignedVehicleId, assignedLocationId, updatedAt] = entry;
     const contactId = contactIdsByPhone[phone] ?? await insertAndRecord(db, runId, context, "contacts", "contact", {
@@ -266,7 +267,10 @@ async function seed(db, context) {
       company: "DEMO DATA — Fictional citizen",
     });
     contactIdsByPhone[phone] = contactId;
-    const conversationId = await insertAndRecord(db, runId, context, "conversations", "conversation", {
+    // CRM conversations are one-per-citizen within an account. A citizen can
+    // still have several independent incidents, each linked to this same
+    // durable communication history and its own request ID/timeline.
+    const conversationId = conversationIdsByPhone[phone] ?? await insertAndRecord(db, runId, context, "conversations", "conversation", {
       account_id: context.accountId,
       user_id: context.actorUserId,
       contact_id: contactId,
@@ -275,6 +279,7 @@ async function seed(db, context) {
       last_message_at: new Date().toISOString(),
       unread_count: 1,
     });
+    conversationIdsByPhone[phone] = conversationId;
     conversationIds[requestId] = conversationId;
     const incidentId = await insertAndRecord(db, runId, context, "deals", "incident", {
       account_id: context.accountId,

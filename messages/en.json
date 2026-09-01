@@ -23,6 +23,7 @@
     "pipelines": "Incidents / Relief Cases",
     "resources": "Resources & Locations",
     "followUp": "Follow-up Required",
+    "team": "Team",
     "broadcasts": "Public Announcements",
     "automations": "Response Rules",
     "flows": "Intake Flows",

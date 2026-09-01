@@ -8,12 +8,14 @@ import { dispatchWebhookEvent } from '@/lib/webhooks/deliver';
 import { handleWhatsAppEmergencyInbound } from '@/lib/whatsapp/emergency-interface';
 import {
   decodeOpenWaInboundImage,
+  decodeOpenWaInboundAudio,
+  storeOpenWaInboundAudio,
   storeOpenWaInboundImage,
   type OpenWaInboundImage,
 } from '@/lib/whatsapp/openwa-inbound-media';
 
 type InboundResult = { duplicate: boolean; conversationId: string; contactId: string };
-type OpenWaInboundContentType = 'text' | 'image' | 'location';
+type OpenWaInboundContentType = 'text' | 'image' | 'audio' | 'location';
 
 async function findOrCreateContact(
   db: SupabaseClient,
@@ -71,12 +73,14 @@ async function findOrCreateConversation(
   accountId: string,
   ownerUserId: string,
   contactId: string,
+  whatsappConfigId?: string | null,
 ) {
   const { data: existing, error: findError } = await db
     .from('conversations')
     .select('*')
     .eq('account_id', accountId)
     .eq('contact_id', contactId)
+    .eq('whatsapp_config_id', whatsappConfigId ?? null)
     .order('created_at', { ascending: true })
     .limit(1);
   if (findError) throw new Error(`Could not find conversation: ${findError.message}`);
@@ -84,7 +88,7 @@ async function findOrCreateConversation(
 
   const { data, error } = await db
     .from('conversations')
-    .insert({ account_id: accountId, user_id: ownerUserId, contact_id: contactId })
+    .insert({ account_id: accountId, user_id: ownerUserId, contact_id: contactId, whatsapp_config_id: whatsappConfigId ?? null })
     .select()
     .single();
   if (error && isUniqueViolation(error)) {
@@ -93,6 +97,7 @@ async function findOrCreateConversation(
       .select('*')
       .eq('account_id', accountId)
       .eq('contact_id', contactId)
+      .eq('whatsapp_config_id', whatsappConfigId ?? null)
       .order('created_at', { ascending: true })
       .limit(1);
     if (raced?.[0]) return { conversation: raced[0], created: false };
@@ -102,7 +107,7 @@ async function findOrCreateConversation(
 }
 
 /**
- * Shared CRM persistence shape for OpenWA text webhooks. It deliberately
+ * Shared CRM persistence shape for OpenWA webhooks. It deliberately
  * excludes the optional AI dispatcher: OpenWA is connected only to the
  * deterministic DRMS emergency, flow, and automation paths.
  */
@@ -110,6 +115,7 @@ export async function persistOpenWaInboundMessage(input: {
   db: SupabaseClient;
   accountId: string;
   ownerUserId: string;
+  whatsappConfigId?: string | null;
   messageId: string;
   senderPhone: string;
   /** The prior incorrect number produced by a legacy `@lid` conversion. */
@@ -119,6 +125,7 @@ export async function persistOpenWaInboundMessage(input: {
   contentText: string;
   location?: { latitude: number; longitude: number; name?: string; address?: string } | null;
   image?: { body: string; mimeType: string | null; caption: string | null } | null;
+  audio?: { body: string; mimeType: string | null } | null;
   occurredAt: string;
 }): Promise<InboundResult> {
   const contactOutcome = await findOrCreateContact(
@@ -134,6 +141,7 @@ export async function persistOpenWaInboundMessage(input: {
     input.accountId,
     input.ownerUserId,
     contactOutcome.contact.id,
+    input.whatsappConfigId,
   );
   const conversation = conversationOutcome.conversation;
 
@@ -144,6 +152,7 @@ export async function persistOpenWaInboundMessage(input: {
   let mediaUrl: string | null = null;
   let mediaType: string | null = null;
   let decodedImage: OpenWaInboundImage | null = null;
+  let decodedAudio: ReturnType<typeof decodeOpenWaInboundAudio> = null;
   if (input.contentType === 'image' && input.image) {
     decodedImage = decodeOpenWaInboundImage(input.image);
     if (decodedImage) {
@@ -156,8 +165,17 @@ export async function persistOpenWaInboundMessage(input: {
       });
     }
   }
+  if (input.contentType === 'audio' && input.audio) {
+    decodedAudio = decodeOpenWaInboundAudio(input.audio);
+    if (decodedAudio) {
+      mediaType = decodedAudio.mimeType;
+      mediaUrl = await storeOpenWaInboundAudio({ storage: input.db.storage, accountId: input.accountId, messageId: input.messageId, audio: decodedAudio });
+    }
+  }
   const persistedText = input.contentType === 'image'
     ? (decodedImage?.caption ?? (input.contentText.trim() || null))
+    : input.contentType === 'audio'
+      ? null
     : (input.contentText.trim() || null);
   const previewText = persistedText || `[${input.contentType}]`;
 
@@ -186,6 +204,7 @@ export async function persistOpenWaInboundMessage(input: {
     .select('id');
   if (messageError) throw new Error(`Could not store inbound message: ${messageError.message}`);
   if (!inserted?.length) return { duplicate: true, conversationId: conversation.id, contactId: contactOutcome.contact.id };
+  const messageRecordId = inserted[0]?.id as string | undefined;
 
   if (conversationOutcome.created) {
     await dispatchWebhookEvent(input.db, input.accountId, 'conversation.created', {
@@ -210,6 +229,9 @@ export async function persistOpenWaInboundMessage(input: {
       contactId: contactOutcome.contact.id,
       conversationId: conversation.id,
       inboundMessageId: input.messageId,
+      inboundDatabaseMessageId: messageRecordId ?? null,
+      sourceWhatsAppConfigId: input.whatsappConfigId ?? null,
+      inboundContentType: input.contentType,
       knownRequesterName: contactOutcome.contact.name ?? null,
       transport: 'openwa',
       input: {

@@ -255,12 +255,12 @@ export async function sendMessageToConversation(
     );
   }
 
-  // WhatsApp config, account-scoped.
-  const { data: config, error: configError } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .single();
+  // Prefer the session that originated this conversation. A migrated inbound
+  // conversation has this value; an unbound legacy conversation only works
+  // while exactly one config exists, never by choosing an arbitrary session.
+  let configQuery = db.from('whatsapp_config').select('*').eq('account_id', accountId);
+  if (conversation.whatsapp_config_id) configQuery = configQuery.eq('id', conversation.whatsapp_config_id);
+  const { data: config, error: configError } = await configQuery.single();
 
   if (configError || !config) {
     throw new SendMessageError(

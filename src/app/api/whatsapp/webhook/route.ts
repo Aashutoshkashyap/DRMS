@@ -311,6 +311,7 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           // inserts that need it for NOT NULL FK compliance. Always
           // the admin who saved the WhatsApp config.
           config.user_id,
+          config.id,
           decryptedAccessToken,
           // Default ON: the column is NOT NULL DEFAULT TRUE, but a row
           // read before migration 039 lands would have it undefined,
@@ -583,6 +584,7 @@ async function processMessage(
   // (contacts, conversations). Always the admin who saved the
   // WhatsApp config; the choice is arbitrary post-017 but stable.
   configOwnerUserId: string,
+  whatsappConfigId: string | null,
   accessToken: string,
   // Per-account opt-out for the inbound-media mirror (migration 039).
   // See parseMessageContent for what it turns off.
@@ -605,7 +607,8 @@ async function processMessage(
   const convResult = await findOrCreateConversation(
     accountId,
     configOwnerUserId,
-    contactRecord.id
+    contactRecord.id,
+    whatsappConfigId,
   )
   if (!convResult) return
   const conversation = convResult.conversation
@@ -778,6 +781,9 @@ async function processMessage(
       contactId: contactRecord.id,
       conversationId: conversation.id,
       inboundMessageId: message.id,
+      inboundDatabaseMessageId: insertedRows[0]?.id ?? null,
+      sourceWhatsAppConfigId: whatsappConfigId,
+      inboundContentType: contentType as "text" | "image" | "audio" | "location" | "document" | "video",
       knownRequesterName: contactRecord.name ?? null,
       input: {
         text: contentText ?? message.text?.body ?? null,
@@ -1191,6 +1197,7 @@ async function findOrCreateConversation(
   accountId: string,
   configOwnerUserId: string,
   contactId: string,
+  whatsappConfigId: string | null,
 ) {
   // Look for an existing conversation in this account, oldest-first.
   //
@@ -1205,13 +1212,13 @@ async function findOrCreateConversation(
   // Ordering oldest-first and taking one row makes the lookup resolve to
   // the same canonical survivor the dedup migration (036) keeps, so any
   // pre-existing duplicates converge instead of compounding.
-  const { data: existingRows, error: findError } = await supabaseAdmin()
+  let conversationQuery = supabaseAdmin()
     .from('conversations')
     .select('*')
     .eq('account_id', accountId)
     .eq('contact_id', contactId)
-    .order('created_at', { ascending: true })
-    .limit(1)
+  if (whatsappConfigId) conversationQuery = conversationQuery.eq('whatsapp_config_id', whatsappConfigId)
+  const { data: existingRows, error: findError } = await conversationQuery.order('created_at', { ascending: true }).limit(1)
 
   if (findError) {
     console.error('Error finding conversation:', findError)
@@ -1230,6 +1237,7 @@ async function findOrCreateConversation(
       account_id: accountId,
       user_id: configOwnerUserId,
       contact_id: contactId,
+      whatsapp_config_id: whatsappConfigId,
     })
     .select()
     .single()
@@ -1240,13 +1248,13 @@ async function findOrCreateConversation(
     // (migration 036) rejected the duplicate. Re-resolve the winning
     // row instead of dropping the message — mirrors findOrCreateContact.
     if (isUniqueViolation(createError)) {
-      const { data: raced } = await supabaseAdmin()
+      let raceQuery = supabaseAdmin()
         .from('conversations')
         .select('*')
         .eq('account_id', accountId)
         .eq('contact_id', contactId)
-        .order('created_at', { ascending: true })
-        .limit(1)
+      if (whatsappConfigId) raceQuery = raceQuery.eq('whatsapp_config_id', whatsappConfigId)
+      const { data: raced } = await raceQuery.order('created_at', { ascending: true }).limit(1)
       if (raced && raced.length > 0) {
         return { conversation: raced[0], created: false }
       }

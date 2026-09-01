@@ -60,13 +60,12 @@ function SignupPageInner() {
 
     setLoading(true);
 
-    // If we have an invite token, point Supabase's verification
-    // email back at the join page so the user can accept after
-    // verifying. Without a token, Supabase uses its default
-    // redirect (the app root).
-    const emailRedirectTo = inviteToken
-      ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
-      : undefined;
+    // Always use the application callback, which exchanges the PKCE code
+    // into the browser's cookie-backed session before navigating onward.
+    // Supabase Auth's Site URL/Redirect URL allow-list decides which origin
+    // is permitted; no deployment hostname is hard-coded here.
+    const next = inviteToken ? `/join/${encodeURIComponent(inviteToken)}` : "/dashboard";
+    const emailRedirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -75,7 +74,7 @@ function SignupPageInner() {
         data: {
           full_name: fullName,
         },
-        ...(emailRedirectTo ? { emailRedirectTo } : {}),
+        emailRedirectTo,
       },
     });
 
@@ -144,7 +143,7 @@ function SignupPageInner() {
           <CardDescription className="text-muted-foreground">
             {inviteToken
               ? "Verify your email, then accept the invitation to join your team."
-              : "Get started with CRM Template for WhatsApp"}
+              : "Create a Disaster Relief Management System coordinator account"}
           </CardDescription>
         </CardHeader>
         <CardContent>

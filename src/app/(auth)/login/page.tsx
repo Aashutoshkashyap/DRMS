@@ -36,6 +36,7 @@ function LoginPageInner() {
   // account. After a successful sign-in we send them to the join
   // page to accept rather than to /dashboard.
   const inviteToken = searchParams.get("invite");
+  const confirmationFailed = searchParams.get("error") === "confirmation_failed";
   const t = useTranslations("LoginPage");
 
   const [email, setEmail] = useState("");
@@ -96,9 +97,9 @@ function LoginPageInner() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
-            {error && (
+            {(error || confirmationFailed) && (
               <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-                {error}
+                {error || "We could not complete that email link. Request a new confirmation or password reset link and try again."}
               </div>
             )}
 

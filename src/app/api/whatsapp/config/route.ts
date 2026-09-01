@@ -94,6 +94,7 @@ export async function GET() {
       .from('whatsapp_config')
       .select('phone_number_id, access_token, status, transport, openwa_session_id')
       .eq('account_id', accountId)
+      .eq('is_primary', true)
       .maybeSingle()
 
     if (configError) {
@@ -258,6 +259,7 @@ export async function POST(request: Request) {
         .from('whatsapp_config')
         .select('id')
         .eq('account_id', accountId)
+        .eq('is_primary', true)
         .maybeSingle()
       const row = {
         transport: 'openwa',
@@ -274,8 +276,8 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       }
       const result = existing
-        ? await supabase.from('whatsapp_config').update(row).eq('account_id', accountId)
-        : await supabase.from('whatsapp_config').insert({ account_id: accountId, user_id: user.id, ...row })
+        ? await supabase.from('whatsapp_config').update(row).eq('id', existing.id)
+        : await supabase.from('whatsapp_config').insert({ account_id: accountId, user_id: user.id, is_primary: true, ...row })
       if (result.error) {
         console.error('Error saving OpenWA configuration:', result.error)
         return NextResponse.json({ error: 'Failed to save OpenWA configuration' }, { status: 500 })
@@ -372,6 +374,7 @@ export async function POST(request: Request) {
       .from('whatsapp_config')
       .select('id, registered_at, phone_number_id')
       .eq('account_id', accountId)
+      .eq('is_primary', true)
       .maybeSingle()
 
     const sameNumber =
@@ -468,7 +471,7 @@ export async function POST(request: Request) {
       const { error: updateError } = await supabase
         .from('whatsapp_config')
         .update(baseRow)
-        .eq('account_id', accountId)
+        .eq('id', existing.id)
 
       if (updateError) {
         console.error('Error updating whatsapp_config:', updateError)
@@ -487,6 +490,7 @@ export async function POST(request: Request) {
         .insert({
           account_id: accountId,
           user_id: user.id,
+          is_primary: true,
           ...baseRow,
         })
 

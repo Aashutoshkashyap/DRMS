@@ -212,6 +212,15 @@ If the intended work is instead a migration to a different stack, database, host
 - Keep one citizen/contact able to hold independent incidents. A new `START` after completion remains an independently created request; duplicate inbound event protection remains unchanged. Citizen status lookup remains account and contact scoped.
 - Make the contact related-incidents list open each incident independently, and extend guarded DEMO DATA with two separate fictional incidents for one fictional citizen plus optional second-coordinator attribution.
 
+### Phase 12 — WhatsApp-first operations simplification
+
+**Status:** Implemented locally; migration `050_whatsapp_first_operations.sql` and the manual Supabase Auth configuration in [`docs/phase12-configuration.md`](docs/phase12-configuration.md) must be applied before release.
+
+- Replace the long deterministic intake questionnaire with `START`/`HELP` followed by one message, media, or a location pin; preserve unmatched messages for human/configured deterministic handling.
+- Add a PKCE `/auth/callback`, internal-only redirect validation, reset-password destination, and DRMS metadata. Production redirect/email sender settings remain Supabase dashboard work.
+- Preserve originating WhatsApp configuration per conversation/request, add safe OpenWA session registry records, durable evidence links, coordinator notifications, related-report review records, and active-vs-resolved board separation.
+- Keep the account/team as the operational owner; existing invitations, role/RLS, lifecycle timeline, status outbox, resource confirmation, and conversation infrastructure are reused without AI, SMS, or automatic dispatch.
+
 | Phase 6 verification | Result | Notes |
 | --- | --- | --- |
 | `npm run lint` | Passed | 0 errors; 35 inherited warnings remain outside this milestone. |

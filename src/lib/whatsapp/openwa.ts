@@ -62,18 +62,28 @@ export type OpenWaInboundPayload =
       contentText: string;
       location: null;
       image: null;
+      audio: null;
     }
   | {
       contentType: "location";
       contentText: string;
       location: { latitude: number; longitude: number; name?: string; address?: string };
       image: null;
+      audio: null;
     }
   | {
       contentType: "image";
       contentText: string;
       location: null;
       image: { body: string; mimeType: string | null; caption: string | null };
+      audio: null;
+    }
+  | {
+      contentType: "audio";
+      contentText: string;
+      location: null;
+      image: null;
+      audio: { body: string; mimeType: string | null };
     };
 
 function finiteNumber(value: unknown): number | null {
@@ -107,6 +117,7 @@ export function parseOpenWaInboundPayload(event: OpenWaWebhookEvent): OpenWaInbo
       contentText: [name, address, `${latitude},${longitude}`].filter(Boolean).join(" - "),
       location: { latitude, longitude, ...(name ? { name } : {}), ...(address ? { address } : {}) },
       image: null,
+      audio: null,
     };
   }
 
@@ -117,10 +128,15 @@ export function parseOpenWaInboundPayload(event: OpenWaWebhookEvent): OpenWaInbo
       contentText: firstString(data.caption) ?? "",
       location: null,
       image: { body: data.body, mimeType, caption: firstString(data.caption) },
+      audio: null,
     };
   }
 
-  return { contentType: "text", contentText: data.body ?? "", location: null, image: null };
+  if ((type === "audio" || type === "voice" || mimeType?.toLowerCase().startsWith("audio/")) && data.body) {
+    return { contentType: "audio", contentText: "", location: null, image: null, audio: { body: data.body, mimeType } };
+  }
+
+  return { contentType: "text", contentText: data.body ?? "", location: null, image: null, audio: null };
 }
 
 type OpenWaWebhook = {

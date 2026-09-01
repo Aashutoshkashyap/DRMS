@@ -11,6 +11,7 @@ const IMAGE_MIME_TYPES = new Set([
   "image/webp",
   "image/gif",
 ]);
+const AUDIO_MIME_TYPES = new Set(["audio/ogg", "audio/opus", "audio/mpeg", "audio/aac", "audio/mp4", "audio/amr"]);
 
 type OpenWaStorage = {
   from(bucket: string): {
@@ -28,6 +29,7 @@ export type OpenWaInboundImage = {
   mimeType: string;
   caption: string | null;
 };
+export type OpenWaInboundAudio = { bytes: Buffer; mimeType: string };
 
 function normalizedImageMime(value: string | null | undefined): string | null {
   const mime = value?.split(";", 1)[0]?.trim().toLowerCase();
@@ -83,6 +85,35 @@ function extensionForImageMime(mimeType: string): string {
   }
 }
 
+function decodeBase64(input: string | null | undefined): { bytes: Buffer; declaredMime: string | null } | null {
+  const source = input?.trim();
+  if (!source) return null;
+  const dataUrl = /^data:([^;,]+);base64,([\s\S]+)$/i.exec(source);
+  const encoded = (dataUrl?.[2] ?? source).replace(/\s/g, "");
+  if (!encoded || encoded.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) return null;
+  const bytes = Buffer.from(encoded, "base64");
+  if (!bytes.length || bytes.length > MEDIA_MAX_BYTES) return null;
+  return { bytes, declaredMime: dataUrl?.[1]?.split(";", 1)[0]?.trim().toLowerCase() ?? null };
+}
+
+/** Decode only bucket-approved voice/audio types. Audio often lacks a reliable
+ * magic signature, so both the declared MIME type and bounded base64 payload
+ * are required; unknown types are retained as an inbox message but not stored. */
+export function decodeOpenWaInboundAudio(input: { body?: string | null; mimeType?: string | null }): OpenWaInboundAudio | null {
+  const decoded = decodeBase64(input.body);
+  const mimeType = (decoded?.declaredMime ?? input.mimeType?.split(";", 1)[0]?.trim().toLowerCase()) || null;
+  if (!decoded || !mimeType || !AUDIO_MIME_TYPES.has(mimeType)) return null;
+  return { bytes: decoded.bytes, mimeType };
+}
+
+function extensionForAudioMime(mimeType: string) {
+  if (mimeType === "audio/mpeg") return "mp3";
+  if (mimeType === "audio/mp4") return "m4a";
+  if (mimeType === "audio/aac") return "aac";
+  if (mimeType === "audio/amr") return "amr";
+  return "ogg";
+}
+
 /** Store a gateway-delivered image in the existing account-scoped CRM bucket. */
 export async function storeOpenWaInboundImage(input: {
   storage: OpenWaStorage;
@@ -106,6 +137,15 @@ export async function storeOpenWaInboundImage(input: {
     console.warn("[openwa] inbound image storage failed:", error.message);
     return null;
   }
+  const { data } = input.storage.from(OPENWA_INBOUND_BUCKET).getPublicUrl(path);
+  return data.publicUrl || null;
+}
+
+export async function storeOpenWaInboundAudio(input: { storage: OpenWaStorage; accountId: string; messageId: string; audio: OpenWaInboundAudio }): Promise<string | null> {
+  const id = crypto.createHash("sha256").update(input.messageId).digest("hex").slice(0, 20);
+  const path = buildMediaPath(input.accountId, `openwa-${id}.${extensionForAudioMime(input.audio.mimeType)}`, null, OPENWA_INBOUND_FOLDER);
+  const { error } = await input.storage.from(OPENWA_INBOUND_BUCKET).upload(path, input.audio.bytes, { contentType: input.audio.mimeType, cacheControl: "3600", upsert: true });
+  if (error) { console.warn("[openwa] inbound audio storage failed:", error.message); return null; }
   const { data } = input.storage.from(OPENWA_INBOUND_BUCKET).getPublicUrl(path);
   return data.publicUrl || null;
 }

@@ -70,13 +70,13 @@ export async function POST(request: Request) {
   const db = supabaseAdmin();
   const { data: configData, error: configError } = await db
     .from('whatsapp_config')
-    .select('account_id,user_id')
+    .select('id,account_id,user_id')
     .eq('transport', 'openwa')
     .eq('openwa_session_id', event.sessionId)
     .maybeSingle();
   // This client is intentionally untyped: the generated Supabase schema is
   // not checked into the app and therefore cannot know migration 043 yet.
-  const config = configData as { account_id: string | null; user_id: string | null } | null;
+  const config = configData as { id: string; account_id: string | null; user_id: string | null } | null;
   if (configError) {
     console.error('[openwa] configuration lookup failed:', configError.message);
     return NextResponse.json({ error: 'Configuration lookup failed' }, { status: 500 });
@@ -91,6 +91,7 @@ export async function POST(request: Request) {
       db,
       accountId: config.account_id,
       ownerUserId: config.user_id,
+      whatsappConfigId: config.id,
       messageId,
       senderPhone,
       legacyLidPhone: legacyLidPhone(senderChatId),
@@ -98,6 +99,7 @@ export async function POST(request: Request) {
       contentText: inbound.contentText,
       location: inbound.location,
       image: inbound.image,
+      audio: inbound.audio,
       occurredAt: eventTimestamp(event),
     });
     return NextResponse.json({ ok: true, duplicate: result.duplicate });
