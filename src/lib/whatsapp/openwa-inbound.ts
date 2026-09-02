@@ -160,7 +160,10 @@ export async function persistOpenWaInboundMessage(input: {
   let decodedAudio: ReturnType<typeof decodeOpenWaInboundAudio> = null;
   if (input.contentType === 'image' && input.image) {
     decodedImage = decodeOpenWaInboundImage(input.image);
-    if (decodedImage) {
+    if (!decodedImage) {
+      mediaStorageStatus = "failed";
+      mediaStorageError = "The WhatsApp gateway did not provide a supported photo payload. The request was saved; ask the citizen to resend the photo.";
+    } else {
       mediaType = decodedImage.mimeType;
       const stored = await storeOpenWaInboundImage({
         storage: input.db.storage,
@@ -174,7 +177,10 @@ export async function persistOpenWaInboundMessage(input: {
   }
   if (input.contentType === 'audio' && input.audio) {
     decodedAudio = decodeOpenWaInboundAudio(input.audio);
-    if (decodedAudio) {
+    if (!decodedAudio) {
+      mediaStorageStatus = "failed";
+      mediaStorageError = "The WhatsApp gateway did not provide a supported voice memo payload. The request was saved; ask the citizen to resend the voice memo.";
+    } else {
       mediaType = decodedAudio.mimeType;
       const stored = await storeOpenWaInboundAudio({ storage: input.db.storage, accountId: input.accountId, messageId: input.messageId, audio: decodedAudio });
       if (stored) { mediaStoragePath = stored.path; mediaStorageStatus = "stored"; }

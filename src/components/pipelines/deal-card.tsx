@@ -1,7 +1,7 @@
 "use client";
 
 import type { Deal, PipelineStage } from "@/types";
-import { AlertTriangle, MapPin, Users } from "lucide-react";
+import { AlertTriangle, MapPin, Paperclip, Volume2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 interface DealCardProps {
@@ -23,16 +23,28 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
   const assigneeLabel = deal.assignee?.full_name || null;
   const assignmentLabel = deal.assigned_team || deal.assigned_resource || assigneeLabel;
   const requiresAssignment = deal.incident_status === "verified" && !deal.assigned_to && !deal.assigned_team && !deal.assigned_resource && !deal.assigned_team_id && !deal.assigned_vehicle_id && !deal.assigned_location_id && !deal.assigned_inventory_id;
+  const evidence = deal.evidence ?? [];
+  const primaryEvidence = evidence[0] ?? null;
+
+  function openDetails() {
+    if (!isOverlay) onEdit(deal);
+  }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={isOverlay ? -1 : 0}
       onClick={(e) => {
         // `onClick` still fires after a non-drag tap because the PointerSensor
         // requires 5px movement before it counts as a drag.
         if (isOverlay) return;
         e.stopPropagation();
-        onEdit(deal);
+        openDetails();
+      }}
+      onKeyDown={(event) => {
+        if (isOverlay || (event.key !== "Enter" && event.key !== " ")) return;
+        event.preventDefault();
+        openDetails();
       }}
       className={`group relative w-full cursor-pointer rounded-xl border border-border/50 bg-muted/70 pl-4 pr-3 py-3 text-left shadow-sm transition-all ${
         isOverlay
@@ -54,8 +66,6 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
         <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${deal.priority === 'critical' ? 'bg-red-500/15 text-red-400' : deal.priority === 'high' ? 'bg-amber-500/15 text-amber-500' : 'bg-muted text-muted-foreground'}`}>{deal.priority.toUpperCase()}</span>
       </div>
 
-      <p className="mt-1 text-[11px] font-medium tracking-wide text-primary">{deal.category.replaceAll("_", " ")} · {stage?.name || deal.incident_status.replaceAll("_", " ")}</p>
-
       {/* Contact row */}
       <div className="mt-2 flex items-center gap-2">
         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-foreground">
@@ -66,11 +76,24 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
 
       <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
         {deal.location && <span className="flex items-center gap-1 truncate"><MapPin className="h-3 w-3 shrink-0" />{deal.location}</span>}
-        <span className="flex items-center gap-1"><Users className="h-3 w-3" />{deal.people_affected} affected · {deal.category.replace('_', ' ')}</span>
       </div>
+
+      {primaryEvidence && !isOverlay && (
+        <a
+          href={`/api/evidence/${primaryEvidence.message_id}`}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+        >
+          {primaryEvidence.media_type?.startsWith("audio/") ? <Volume2 className="h-3 w-3" /> : <Paperclip className="h-3 w-3" />}
+          Open {primaryEvidence.media_type?.startsWith("audio/") ? "voice memo" : "photo"}{evidence.length > 1 ? ` (${evidence.length})` : ""}
+        </a>
+      )}
 
       {assignmentLabel && <p className="mt-2 truncate text-[11px] text-primary">Assigned: {assignmentLabel}</p>}
       {requiresAssignment && <p className="mt-2 flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400"><AlertTriangle className="h-3 w-3" />Follow-up required: assign response</p>}
-    </button>
+    </div>
   );
 }

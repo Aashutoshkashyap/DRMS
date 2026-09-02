@@ -113,7 +113,26 @@ export default function PipelinesPage() {
         .select("*, contact:contacts(*), assignee:profiles!deals_assigned_to_fkey(*)")
         .eq("pipeline_id", pipelineId)
         .order("created_at", { ascending: false });
-      return (data ?? []) as Deal[];
+      const requests = (data ?? []) as Deal[];
+      if (!requests.length) return requests;
+
+      // The board only needs a compact attachment pointer. File access still
+      // goes through the authenticated evidence route on click.
+      const { data: evidence, error } = await supabase
+        .from("incident_evidence")
+        .select("deal_id,message_id,media_type")
+        .in("deal_id", requests.map((request) => request.id));
+      if (error) {
+        console.error("Failed to load incident evidence:", error.message);
+        return requests;
+      }
+      const evidenceByDeal = new Map<string, Array<{ message_id: string; media_type: string | null }>>();
+      for (const item of evidence ?? []) {
+        const items = evidenceByDeal.get(item.deal_id) ?? [];
+        items.push({ message_id: item.message_id, media_type: item.media_type });
+        evidenceByDeal.set(item.deal_id, items);
+      }
+      return requests.map((request) => ({ ...request, evidence: evidenceByDeal.get(request.id) ?? [] }));
     },
     [supabase],
   );

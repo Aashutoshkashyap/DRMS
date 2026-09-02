@@ -467,6 +467,9 @@ export interface Deal {
   assigned_location_id?: string | null;
   assigned_inventory_id?: string | null;
   resolved_at?: string | null;
+  /** Private citizen media attached to this request. Populated for Kanban
+   * cards so coordinators can open evidence without leaving the board. */
+  evidence?: Array<{ message_id: string; media_type: string | null }>;
 }
 
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';

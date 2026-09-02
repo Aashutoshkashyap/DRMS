@@ -50,6 +50,24 @@ export type OpenWaWebhookEvent = {
     mimeType?: string;
     mimetype?: string;
     mediaType?: string;
+    /** Gateway versions have used both top-level and nested media fields.
+     * Only base64/data-URL values are accepted downstream; a remote URL is
+     * deliberately never fetched from an inbound webhook payload. */
+    media?: {
+      body?: string;
+      data?: string;
+      base64?: string;
+      base64Data?: string;
+      dataUrl?: string;
+      caption?: string;
+      mimeType?: string;
+      mimetype?: string;
+      mediaType?: string;
+    };
+    mediaData?: string;
+    base64?: string;
+    base64Data?: string;
+    dataUrl?: string;
     timestamp?: number;
     fromMe?: boolean;
     isGroup?: boolean;
@@ -101,7 +119,9 @@ function firstString(...values: unknown[]): string | null {
 /**
  * Normalize the two OpenWA payload variants we need for disaster intake.
  * Native OpenWA exposes location as `lat`/`lng`/`loc`; our gateway wrapper
- * may nest those fields below `location`. Images carry base64 in `body`.
+ * may nest those fields below `location`. Different gateway releases put
+ * base64 attachment bytes either in `body` or below `media`; normalize both
+ * without accepting a remote media URL from an untrusted webhook.
  */
 export function parseOpenWaInboundPayload(event: OpenWaWebhookEvent): OpenWaInboundPayload {
   const data = event.data;
@@ -121,19 +141,31 @@ export function parseOpenWaInboundPayload(event: OpenWaWebhookEvent): OpenWaInbo
     };
   }
 
-  const mimeType = firstString(data.mimeType, data.mimetype, data.mediaType);
-  if ((type === "image" || mimeType?.toLowerCase().startsWith("image/")) && data.body) {
+  const media = data.media;
+  const mimeType = firstString(
+    media?.mimeType, media?.mimetype, media?.mediaType,
+    data.mimeType, data.mimetype, data.mediaType,
+  );
+  const mediaBody = firstString(
+    media?.body, media?.data, media?.base64, media?.base64Data, media?.dataUrl,
+    data.mediaData, data.base64, data.base64Data, data.dataUrl, data.body,
+  );
+  const caption = firstString(data.caption, media?.caption);
+  if (type === "image" || mimeType?.toLowerCase().startsWith("image/")) {
     return {
       contentType: "image",
-      contentText: firstString(data.caption) ?? "",
+      contentText: caption ?? "",
       location: null,
-      image: { body: data.body, mimeType, caption: firstString(data.caption) },
+      // Preserve the event as an image even if the gateway omitted bytes, so
+      // the CRM can show a clear resend request rather than pretending it was
+      // an empty text message.
+      image: { body: mediaBody ?? "", mimeType, caption },
       audio: null,
     };
   }
 
-  if ((type === "audio" || type === "voice" || mimeType?.toLowerCase().startsWith("audio/")) && data.body) {
-    return { contentType: "audio", contentText: "", location: null, image: null, audio: { body: data.body, mimeType } };
+  if (["audio", "voice", "voice_note", "voicenote", "ptt"].includes(type ?? "") || mimeType?.toLowerCase().startsWith("audio/")) {
+    return { contentType: "audio", contentText: "", location: null, image: null, audio: { body: mediaBody ?? "", mimeType } };
   }
 
   return { contentType: "text", contentText: data.body ?? "", location: null, image: null, audio: null };

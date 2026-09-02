@@ -230,11 +230,17 @@ export function MediaAudioBubble({
   message: Message;
   t: Translator;
 }) {
+  const { src, status } = useMediaBlobUrl(message.media_url);
   const { downloading, download } = useMediaDownload(message, t);
+
+  if (status === "error") return <MediaUnavailable label={t("audio")} t={t} />;
+  if (status !== "ready" || !src) {
+    return <MediaPlaceholder><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></MediaPlaceholder>;
+  }
 
   return (
     <div className="flex items-center gap-2">
-      <audio src={message.media_url} controls className="max-w-60" />
+      <audio src={src} controls className="max-w-60" />
       <MediaActionButton
         icon={Download}
         label={t("download")}

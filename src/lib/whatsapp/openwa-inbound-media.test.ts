@@ -5,6 +5,7 @@ import {
   decodeOpenWaInboundImage,
   storeOpenWaInboundImage,
 } from "./openwa-inbound-media";
+import { MEDIA_MAX_BYTES_BY_KIND } from "@/lib/storage/upload-media";
 
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
 
@@ -16,6 +17,14 @@ describe("OpenWA inbound image handling", () => {
 
   it("rejects non-image base64 rather than allowing it into a text field", () => {
     expect(decodeOpenWaInboundImage({ body: Buffer.from("not a photo").toString("base64") })).toBeNull();
+  });
+
+  it("caps inbound photos at 5 MB without transforming the stored evidence", () => {
+    const oversized = Buffer.alloc(MEDIA_MAX_BYTES_BY_KIND.image + 1);
+    oversized[0] = 0xff;
+    oversized[1] = 0xd8;
+    oversized[2] = 0xff;
+    expect(decodeOpenWaInboundImage({ body: oversized.toString("base64"), mimeType: "image/jpeg" })).toBeNull();
   });
 
   it("stores a decoded image at a stable account-scoped path", async () => {

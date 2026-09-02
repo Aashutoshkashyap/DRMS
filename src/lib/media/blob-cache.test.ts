@@ -8,6 +8,7 @@ import {
 } from "./blob-cache";
 
 const PROXY = "/api/whatsapp/media/";
+const EVIDENCE = "/api/evidence/";
 const BUCKET = "https://x.supabase.co/storage/v1/object/public/chat-media/a/1-p.png";
 
 function okResponse(body: string): Response {
@@ -30,8 +31,9 @@ beforeEach(() => {
 });
 
 describe("isProxiedMediaUrl", () => {
-  it("recognises inbound media, not bucket URLs", () => {
+  it("recognises both authenticated inbound media routes, not bucket URLs", () => {
     expect(isProxiedMediaUrl(`${PROXY}123`)).toBe(true);
+    expect(isProxiedMediaUrl(`${EVIDENCE}123`)).toBe(true);
     expect(isProxiedMediaUrl(BUCKET)).toBe(false);
   });
 });

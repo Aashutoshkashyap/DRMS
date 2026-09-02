@@ -102,13 +102,11 @@ export function PipelineBoard({
       <div className="pipeline-scroll flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 lg:snap-none">
         {sortedStages.map((stage) => {
           const stageDeals = dealsByStage.get(stage.id) ?? [];
-          const peopleAffected = stageDeals.reduce((sum, request) => sum + request.people_affected, 0);
           return (
             <StageColumn
               key={stage.id}
               stage={stage}
               deals={stageDeals}
-              peopleAffected={peopleAffected}
               onAddDeal={onAddDeal}
               onEditDeal={onEditDeal}
             />
@@ -181,13 +179,11 @@ export function PipelineBoard({
 function StageColumn({
   stage,
   deals,
-  peopleAffected,
   onAddDeal,
   onEditDeal,
 }: {
   stage: PipelineStage;
   deals: Deal[];
-  peopleAffected: number;
   onAddDeal: (stageId: string) => void;
   onEditDeal: (deal: Deal) => void;
 }) {
@@ -214,10 +210,6 @@ function StageColumn({
           {deals.length}
         </span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        {peopleAffected} people affected
-      </p>
-
       <div
         ref={setNodeRef}
         className={`mt-3 flex flex-1 flex-col gap-2 rounded-lg transition-all ${

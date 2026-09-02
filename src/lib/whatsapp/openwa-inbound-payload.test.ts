@@ -33,4 +33,34 @@ describe("parseOpenWaInboundPayload", () => {
   it("keeps an OpenWA voice payload out of message text", () => {
     expect(parseOpenWaInboundPayload(event({ id: "audio-1", type: "voice", body: "T2dnUw==", mimeType: "audio/ogg" }))).toMatchObject({ contentType: "audio", contentText: "", image: null, audio: { mimeType: "audio/ogg" } });
   });
+
+  it("accepts nested gateway media bytes for photos and preserves its caption", () => {
+    expect(parseOpenWaInboundPayload(event({
+      id: "image-nested", type: "image", body: "Damaged bridge",
+      media: { data: "data:image/jpeg;base64,/9j/4AAQ", mimeType: "image/jpeg", caption: "Bridge photo" },
+    }))).toEqual({
+      contentType: "image",
+      contentText: "Bridge photo",
+      location: null,
+      image: { body: "data:image/jpeg;base64,/9j/4AAQ", mimeType: "image/jpeg", caption: "Bridge photo" },
+      audio: null,
+    });
+  });
+
+  it("retains an attachment event when gateway bytes are missing so persistence can flag it", () => {
+    expect(parseOpenWaInboundPayload(event({ id: "missing-audio", type: "voice" }))).toEqual({
+      contentType: "audio",
+      contentText: "",
+      location: null,
+      image: null,
+      audio: { body: "", mimeType: null },
+    });
+  });
+
+  it("recognises OpenWA push-to-talk voice memo events", () => {
+    expect(parseOpenWaInboundPayload(event({ id: "ptt-1", type: "ptt", media: { base64: "T2dnUw==", mimetype: "audio/ogg" } }))).toMatchObject({
+      contentType: "audio",
+      audio: { body: "T2dnUw==", mimeType: "audio/ogg" },
+    });
+  });
 });

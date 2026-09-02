@@ -22,13 +22,13 @@ interface ResolvedMedia {
  * Resolve a `messages.media_url` into something an `<img>` can render.
  *
  * Public `chat-media` URLs are handed straight back — the browser fetches
- * and caches them itself. Inbound `/api/whatsapp/media/*` URLs are pulled
- * through `loadMediaBlob` (credentialed, cached, de-duplicated) and turned
- * into an object URL that is revoked when the URL changes or the component
- * unmounts.
+ * and caches them itself. Inbound `/api/whatsapp/media/*` and private
+ * `/api/evidence/*` URLs are pulled through `loadMediaBlob` (credentialed,
+ * cached, de-duplicated) and turned into an object URL that is revoked when
+ * the URL changes or the component unmounts.
  *
- * Only use this for images. Video and audio must keep their plain URL so
- * the element streams instead of buffering up to 16 MB before it plays.
+ * Use this for private images and voice notes. Large video keeps its plain
+ * URL so the element can stream instead of buffering before it plays.
  */
 export function useMediaBlobUrl(url: string | undefined): MediaBlobUrlState {
   const [resolved, setResolved] = useState<ResolvedMedia | null>(null);

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-import { MEDIA_MAX_BYTES, buildMediaPath } from "@/lib/storage/upload-media";
+import { MEDIA_MAX_BYTES, MEDIA_MAX_BYTES_BY_KIND, buildMediaPath } from "@/lib/storage/upload-media";
 
 /** Dedicated private bucket for citizen incident evidence. */
 export const OPENWA_INBOUND_BUCKET = "drms-evidence";
@@ -58,11 +58,14 @@ export function decodeOpenWaInboundImage(input: {
   if (!source) return null;
 
   const dataUrl = /^data:([^;,]+);base64,([\s\S]+)$/i.exec(source);
-  const encoded = (dataUrl?.[2] ?? source).replace(/\s/g, "");
+  const encoded = (dataUrl?.[2] ?? source).replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/");
   if (!encoded || encoded.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) return null;
 
   const bytes = Buffer.from(encoded, "base64");
-  if (!bytes.length || bytes.length > MEDIA_MAX_BYTES) return null;
+  // Preserve evidence bytes exactly as received; do not re-encode a citizen's
+  // photo on the emergency path. A deterministic 5 MB cap bounds storage and
+  // webhook memory without changing the evidentiary original.
+  if (!bytes.length || bytes.length > MEDIA_MAX_BYTES_BY_KIND.image) return null;
 
   const sniffed = sniffImageMime(bytes);
   if (!sniffed) return null;
@@ -89,7 +92,7 @@ function decodeBase64(input: string | null | undefined): { bytes: Buffer; declar
   const source = input?.trim();
   if (!source) return null;
   const dataUrl = /^data:([^;,]+);base64,([\s\S]+)$/i.exec(source);
-  const encoded = (dataUrl?.[2] ?? source).replace(/\s/g, "");
+  const encoded = (dataUrl?.[2] ?? source).replace(/\s/g, "").replace(/-/g, "+").replace(/_/g, "/");
   if (!encoded || encoded.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded)) return null;
   const bytes = Buffer.from(encoded, "base64");
   if (!bytes.length || bytes.length > MEDIA_MAX_BYTES) return null;
