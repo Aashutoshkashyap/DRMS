@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { classifyCitizenLanguage, isExplicitEmergencyTrigger } from "./emergency-entry";
 
 describe("explicit emergency entry triggers", () => {
-  it.each(["START", " start! ", "HELP", "SOS!", "EMERGENCY", "RESCUE", "सहयोग", "मद्दत", "उद्धार", "आपतकाल", "आपतकालीन", "sahayog", "maddat", "uddhar", "apatkal", "apatkaal"])("accepts %s", (value) => {
+  it.each(["START", " start! ", "HELP", "SOS!", "EMERGENCY", "RESCUE", "URGENT", "RELIEF", "MADAD", "बचाऊ", "सहयोग", "मद्दत", "उद्धार", "आपतकाल", "आपतकालीन", "sahayog", "maddat", "madad", "uddhar", "apatkal", "apatkaal", "bachau"])("accepts %s", (value) => {
     expect(isExplicitEmergencyTrigger(value)).toBe(true);
   });
 
   it.each([
     "HELP ME", "flood", "water", "fire", "earthquake", "landslide", "ambulance", "hospital", "injured",
     "पानी", "बाढी", "आगो", "भूकम्प", "पहिरो",
-    "URGENT", "SOS HELP", "NEED HELP", "बचाउनुहोस्", "बचाउ", "मद्दत गर्नुहोस्",
-    "bachaidinu", "bachau", "maddat garnuhos", "hrepl", "starrt", "resqu", "we need rescue now",
+    "SOS HELP", "NEED HELP", "बचाउनुहोस्", "बचाउ", "मद्दत गर्नुहोस्",
+    "bachaidinu", "maddat garnuhos", "hrepl", "starrt", "resqu", "we need rescue now",
   ])("does not treat ordinary, optional, or misspelled content %s as an entry trigger", (value) => {
     expect(isExplicitEmergencyTrigger(value)).toBe(false);
   });

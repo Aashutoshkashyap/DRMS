@@ -47,9 +47,29 @@ export const DEFAULT_MODE: Mode = "dark";
 
 export const MODE_STORAGE_KEY = "wacrm.mode";
 
+/**
+ * Display language is deliberately separate from next-intl's deployment
+ * locale. Coordinators can switch the core operational shell without a
+ * redirect, and the choice remains local to their device.
+ */
+export const DISPLAY_LANGUAGES = ["en", "ne"] as const;
+
+export type DisplayLanguage = (typeof DISPLAY_LANGUAGES)[number];
+
+export const DEFAULT_DISPLAY_LANGUAGE: DisplayLanguage = "en";
+
+export const DISPLAY_LANGUAGE_STORAGE_KEY = "drms.display-language";
+
 export function isMode(value: unknown): value is Mode {
   return (
     typeof value === "string" && (MODES as ReadonlyArray<string>).includes(value)
+  );
+}
+
+export function isDisplayLanguage(value: unknown): value is DisplayLanguage {
+  return (
+    typeof value === "string" &&
+    (DISPLAY_LANGUAGES as ReadonlyArray<string>).includes(value)
   );
 }
 

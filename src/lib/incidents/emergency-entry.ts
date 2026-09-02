@@ -3,9 +3,9 @@
  * must remain available to coordinators until the citizen explicitly starts
  * an intake. */
 const EMERGENCY_ENTRY_TRIGGERS = new Set([
-  "start", "help", "sos", "emergency", "rescue",
-  "सहयोग", "मद्दत", "उद्धार", "आपतकाल", "आपतकालीन",
-  "sahayog", "maddat", "uddhar", "apatkal", "apatkaal",
+  "start", "help", "sos", "emergency", "rescue", "urgent", "relief",
+  "सहयोग", "मद्दत", "उद्धार", "आपतकाल", "आपतकालीन", "बचाऊ",
+  "sahayog", "maddat", "madad", "uddhar", "apatkal", "apatkaal", "bachau",
 ]);
 
 /** Trim whitespace and only surrounding punctuation, then match one complete
@@ -38,8 +38,11 @@ export const BILINGUAL_EMERGENCY_OPENING = `राहत/उद्धार आ�
 Need emergency relief or rescue?
 Simply describe your request.
 
-तपाईं photo वा voice message पनि पठाउन सक्नुहुन्छ।
-You can also send a photo or voice message.`;
+तपाईं text, photo, voice message वा location पठाउन सक्नुहुन्छ।
+You can send text, a photo, voice message, or a WhatsApp location.
+
+एक वा धेरै सन्देश पठाउन सक्नुहुन्छ।
+You may send one or more.`;
 
 export const BILINGUAL_LOCATION_PROMPT = `धन्यवाद। अब सहायता चाहिएको स्थान पठाउनुहोस्।
 Map pin पठाउनुहोस्, वा ठाउँ/landmark अथवा Google Maps link लेख्नुहोस्।

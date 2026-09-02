@@ -11,12 +11,16 @@ import {
 
 import {
   DEFAULT_MODE,
+  DEFAULT_DISPLAY_LANGUAGE,
+  DISPLAY_LANGUAGE_STORAGE_KEY,
   DEFAULT_THEME,
   MODE_STORAGE_KEY,
   STORAGE_KEY,
   isMode,
+  isDisplayLanguage,
   isThemeId,
   type Mode,
+  type DisplayLanguage,
   type ThemeId,
 } from "@/lib/themes";
 
@@ -43,6 +47,8 @@ interface ThemeContextValue {
   mode: Mode;
   setMode: (next: Mode) => void;
   toggleMode: () => void;
+  language: DisplayLanguage;
+  setLanguage: (next: DisplayLanguage) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -76,9 +82,23 @@ function readInitialMode(): Mode {
   return DEFAULT_MODE;
 }
 
+function readInitialLanguage(): DisplayLanguage {
+  if (typeof window === "undefined") return DEFAULT_DISPLAY_LANGUAGE;
+  const fromAttr = document.documentElement.dataset.language;
+  if (isDisplayLanguage(fromAttr)) return fromAttr;
+  try {
+    const stored = localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY);
+    if (isDisplayLanguage(stored)) return stored;
+  } catch {
+    // localStorage can throw in private-browsing / sandboxed contexts.
+  }
+  return DEFAULT_DISPLAY_LANGUAGE;
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(readInitialTheme);
   const [mode, setModeState] = useState<Mode>(readInitialMode);
+  const [language, setLanguageState] = useState<DisplayLanguage>(readInitialLanguage);
 
   const setTheme = useCallback((next: ThemeId) => {
     setThemeState(next);
@@ -109,6 +129,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setMode(mode === "dark" ? "light" : "dark");
   }, [mode, setMode]);
 
+  const setLanguage = useCallback((next: DisplayLanguage) => {
+    setLanguageState(next);
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.language = next;
+      document.documentElement.lang = next;
+    }
+    try {
+      localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, next);
+    } catch {
+      // The current tab still updates when persistence is unavailable.
+    }
+  }, []);
+
   // Sync from other tabs — change theme or mode in tab A, tab B
   // catches up without a refresh.
   useEffect(() => {
@@ -126,13 +159,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           document.documentElement.dataset.mode = e.newValue;
         }
       }
+      if (e.key === DISPLAY_LANGUAGE_STORAGE_KEY) {
+        if (isDisplayLanguage(e.newValue) && e.newValue !== language) {
+          setLanguageState(e.newValue);
+          document.documentElement.dataset.language = e.newValue;
+          document.documentElement.lang = e.newValue;
+        }
+      }
     }
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, [theme, mode]);
+  }, [theme, mode, language]);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, mode, setMode, toggleMode }}>
+    <ThemeContext.Provider value={{ theme, setTheme, mode, setMode, toggleMode, language, setLanguage }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -150,6 +190,8 @@ export function useTheme(): ThemeContextValue {
       mode: DEFAULT_MODE,
       setMode: () => {},
       toggleMode: () => {},
+      language: DEFAULT_DISPLAY_LANGUAGE,
+      setLanguage: () => {},
     };
   }
   return ctx;

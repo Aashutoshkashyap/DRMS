@@ -11,6 +11,6 @@ export async function GET() {
       .eq("account_id", accountId).is("recovered_at", null).order("last_seen_at", { ascending: false }).limit(10);
     if (error) throw error;
     const alerts = data ?? [];
-    return NextResponse.json({ status: alerts.some((item) => item.severity === "incident") ? "incident" : alerts.length ? "degraded" : "unknown", alerts });
+    return NextResponse.json({ status: alerts.some((item) => item.severity === "incident") ? "incident" : alerts.length ? "degraded" : "operational", alerts });
   } catch (error) { return toErrorResponse(error); }
 }

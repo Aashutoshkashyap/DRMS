@@ -7,6 +7,9 @@ import { ThemeProvider } from "@/hooks/use-theme";
 import { ThemedToaster } from "@/components/themed-toaster";
 import {
   DEFAULT_MODE,
+  DEFAULT_DISPLAY_LANGUAGE,
+  DISPLAY_LANGUAGE_STORAGE_KEY,
+  DISPLAY_LANGUAGES,
   DEFAULT_THEME,
   MODE_STORAGE_KEY,
   MODES,
@@ -64,9 +67,18 @@ const THEME_BOOT_SCRIPT = `
     var MODES = ${JSON.stringify(MODES)};
     var savedMode = localStorage.getItem(MODE_KEY);
     d.dataset.mode = MODES.indexOf(savedMode) !== -1 ? savedMode : MODE_DEFAULT;
+
+    var LANGUAGE_KEY = ${JSON.stringify(DISPLAY_LANGUAGE_STORAGE_KEY)};
+    var LANGUAGE_DEFAULT = ${JSON.stringify(DEFAULT_DISPLAY_LANGUAGE)};
+    var LANGUAGES = ${JSON.stringify(DISPLAY_LANGUAGES)};
+    var savedLanguage = localStorage.getItem(LANGUAGE_KEY);
+    var language = LANGUAGES.indexOf(savedLanguage) !== -1 ? savedLanguage : LANGUAGE_DEFAULT;
+    d.dataset.language = language;
+    d.lang = language;
   } catch (_e) {
     d.dataset.theme = ${JSON.stringify(DEFAULT_THEME)};
     d.dataset.mode = ${JSON.stringify(DEFAULT_MODE)};
+    d.dataset.language = ${JSON.stringify(DEFAULT_DISPLAY_LANGUAGE)};
   }
 })();
 `;
@@ -84,6 +96,7 @@ export default async function RootLayout({
       lang={locale}
       data-theme={DEFAULT_THEME}
       data-mode={DEFAULT_MODE}
+      data-language={DEFAULT_DISPLAY_LANGUAGE}
       className="h-full antialiased"
       // The `theme-boot` script below rewrites `data-theme` and
       // `data-mode` on <html> from localStorage before React hydrates,

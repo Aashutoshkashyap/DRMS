@@ -17,6 +17,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ModeToggle } from "@/components/layout/mode-toggle";
+import { LanguageToggle } from "@/components/layout/language-toggle";
+import { useTheme } from "@/hooks/use-theme";
+import { operationalLabel } from "@/lib/operational-language";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "dashboard",
@@ -53,6 +56,7 @@ export function Header({ onOpenSidebar }: HeaderProps) {
   const t = useTranslations("Header");
   const pathname = usePathname();
   const { profile, signOut } = useAuth();
+  const { language } = useTheme();
   const titleKey = getPageTitleKey(pathname);
 
   const initial =
@@ -73,11 +77,12 @@ export function Header({ onOpenSidebar }: HeaderProps) {
           <Menu className="h-5 w-5" />
         </button>
         <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">
-          {t(titleKey as string)}
+          {operationalLabel(language, titleKey, t(titleKey as string))}
         </h1>
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2">
+        <LanguageToggle />
         <ModeToggle />
 
         <DropdownMenu>

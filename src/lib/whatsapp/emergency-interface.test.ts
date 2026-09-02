@@ -86,7 +86,7 @@ describe("two-step WhatsApp emergency adapter", () => {
     expect(mocks.createIncidentRequest).not.toHaveBeenCalled();
     expect(mocks.sendMessageToConversation).toHaveBeenCalledTimes(1);
   });
-  it.each(["START", "start!", "HELP", "SOS!", "EMERGENCY", "RESCUE", "सहयोग", "मद्दत", "उद्धार", "आपतकाल", "आपतकालीन", "sahayog", "maddat", "uddhar", "apatkal", "apatkaal"])("starts the same bilingual intake for %s", async (trigger) => {
+  it.each(["START", "start!", "HELP", "SOS!", "EMERGENCY", "RESCUE", "URGENT", "RELIEF", "MADAD", "बचाऊ", "सहयोग", "मद्दत", "उद्धार", "आपतकाल", "आपतकालीन", "sahayog", "maddat", "madad", "uddhar", "apatkal", "apatkaal", "bachau"])("starts the same bilingual intake for %s", async (trigger) => {
     const input = base();
     await handleWhatsAppEmergencyInbound({ ...input, inboundMessageId: `trigger-${trigger}`, input: { text: trigger } });
     expect(mocks.sendMessageToConversation).toHaveBeenCalledWith(input.db, "account-1", expect.objectContaining({ contentText: expect.stringContaining("राहत/उद्धार") }));

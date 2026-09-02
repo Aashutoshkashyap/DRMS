@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
+import { useTheme } from "@/hooks/use-theme";
+import { operationalLabel } from "@/lib/operational-language";
 import {
   Crown,
   GitBranch,
@@ -111,6 +113,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
+  const { language } = useTheme();
   const totalUnread = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
   // Only surface the account-name strip when it actually carries
@@ -230,7 +233,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                     )}
                   >
                     <item.icon className="h-4 w-4" />
-                    <span className="flex-1">{t(item.labelKey as string)}</span>
+                    <span className="flex-1">{operationalLabel(language, item.labelKey, t(item.labelKey as string))}</span>
                     {item.beta && (
                       <span
                         aria-label={t("beta")}
@@ -279,7 +282,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                     )}
                   >
                     <item.icon className="h-4 w-4" />
-                    {t(item.labelKey as string)}
+                    {operationalLabel(language, item.labelKey, t(item.labelKey as string))}
                   </Link>
                 </li>
               );

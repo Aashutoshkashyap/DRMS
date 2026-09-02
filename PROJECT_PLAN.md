@@ -106,6 +106,15 @@ If the intended work is instead a migration to a different stack, database, host
 - A demo-only controlled coordinator and outsider verified shared operations without touching the primary WhatsApp workspace: owner and coordinator observed the same forward-only status transitions, assignment, internal note, and six stored conversations; activity included each actor and their configured demo response team; the outsider could not read the demo incident or conversations.
 - The repaired Test Gravity account was moved non-destructively into the primary shared workspace as an admin. Its verified empty bootstrap account was retained because production-account deletion requires separate authorization; the corrected invitation flow removes the exact empty scaffold atomically for future joins.
 
+### Phase 14 — Final product hardening and demo readiness
+
+**Status:** Implemented locally; release validation is recorded with the deployment.
+
+- Keep the existing signed Meta/OpenWA webhooks, CRM persistence, idempotency, session model, shared-workspace RLS, and human-controlled workflow unchanged. Add only explicit panic-friendly entry aliases (`URGENT`, `RELIEF`, `MADAD`, `बचाऊ`, and `bachau`) to the compact existing trigger set; ordinary descriptions still do not start intake.
+- The bilingual opening now explicitly accepts text, photos, voice messages, and WhatsApp locations, while the existing state machine creates a Request ID only after stored request/evidence and location input. Repeated triggers continue/restart an active session without creating a duplicate incident.
+- Add a visible, device-persisted `English | नेपाली` selector. It changes the high-frequency operational shell labels through reviewed translations without changing original citizen messages. Detailed page translation remains a separately reviewed catalog task rather than presenting machine-generated text as production-ready Nepali.
+- Report `Operational` only when the authenticated dashboard database check succeeds and there are no unresolved recorded webhook, evidence-storage, or outbound WhatsApp failures for that workspace. This is an observed-record status, not a claim that an external WhatsApp device is online.
+
 ### Phase 2 — Disaster Coordination Core
 
 **Status:** Implemented; final validation recorded below.
