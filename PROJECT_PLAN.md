@@ -115,6 +115,14 @@ If the intended work is instead a migration to a different stack, database, host
 - Add a visible, device-persisted `English | नेपाली` selector. It changes the high-frequency operational shell labels through reviewed translations without changing original citizen messages. Detailed page translation remains a separately reviewed catalog task rather than presenting machine-generated text as production-ready Nepali.
 - Report `Operational` only when the authenticated dashboard database check succeeds and there are no unresolved recorded webhook, evidence-storage, or outbound WhatsApp failures for that workspace. This is an observed-record status, not a claim that an external WhatsApp device is online.
 
+### Shared authenticated coordination access
+
+**Status:** Enabled for the production coordination workspace.
+
+- The owner explicitly authorized every authenticated DRMS user to join the designated production coordination workspace as an operational `agent`. This is not public access: anonymous visitors remain blocked, and agents do not receive owner/admin permissions for provider credentials, workspace settings, invitations, or role management.
+- New signups join the designated workspace directly. Existing users auto-join only when their old account is the verified empty disaster bootstrap account; accounts with saved operational/configuration data remain intact and are never silently detached from their data.
+- The dashboard no longer shows the private-workspace invitation warning or hides its operational surface while the authenticated workspace context is loading.
+
 ### Phase 2 — Disaster Coordination Core
 
 **Status:** Implemented; final validation recorded below.
